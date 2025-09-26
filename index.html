@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LOSCOBOT Dashboard abbonamenti</title>
+    <link rel="icon" href="Losco_Bot.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Flatpickr (calendar) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -283,18 +284,41 @@
         if (!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Caricamento…</div>;
 
         return (
-          <div className="min-h-screen">
-            <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
-              <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl font-bold drop-shadow">LOSCOBOT Dashboard abbonamenti</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`} onClick={() => switchCompany("1")}>Hidden</button>
-                  <button className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`} onClick={() => switchCompany("2")}>Sara</button>
-                </div>
+          <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
+            <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
+              {/* LOGO + TITOLO (logo per primo) */}
+              <a href="./" className="flex items-center gap-3">
+                <img
+                  src="Losco_Bot.png"
+                  alt="LOSCOBOT"
+                  className="h-9 w-9 rounded-md shadow-sm select-none"
+                  draggable="false"
+                  width="36"
+                  height="36"
+                />
+                <span className="text-2xl font-bold drop-shadow">
+                  LOSCOBOT Dashboard abbonamenti
+                </span>
+              </a>
+          
+              {/* SWITCH COMPANY */}
+              <div className="flex items-center gap-2">
+                <button
+                  className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                  onClick={() => switchCompany("1")}
+                >
+                  Hidden
+                </button>
+                <button
+                  className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                  onClick={() => switchCompany("2")}
+                >
+                  Sara
+                </button>
               </div>
-            </header>
+            </div>
+          </header>
+
 
             <main className="mx-auto max-w-6xl px-4 py-6">
               <section className="mb-6 grid gap-3 md:grid-cols-3">
