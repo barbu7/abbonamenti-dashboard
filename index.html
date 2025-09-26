@@ -10,17 +10,19 @@
   <body class="bg-blue-200">
     <div id="root"></div>
 
+    <!-- React + Babel -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
+      /* ====== CONFIG API ====== */
       const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec";
       const API_TOKEN = "LoscoBotManagement";
 
       const { useState, useEffect, useMemo, useRef } = React;
 
-      // utils
+      /* ====== UTILS ====== */
       function formatLocalDate(d){ const dt=d instanceof Date?d:new Date(d); const dd=String(dt.getDate()).padStart(2,"0"); const mm=String(dt.getMonth()+1).padStart(2,"0"); const yyyy=dt.getFullYear(); return `${dd}/${mm}/${yyyy}`;}
       function parseLocalDateStr(str){ const s=String(str||"").trim(); const m=s.match(/^(\d{1,2})[\/\-\.\s](\d{1,2})[\/\-\.\s](\d{4})$/); if(!m)return null; const dd=+m[1], mm=+m[2], yyyy=+m[3]; const dt=new Date(yyyy,mm-1,dd); if(dt.getFullYear()!==yyyy||dt.getMonth()!==mm-1||dt.getDate()!==dd)return null; dt.setHours(0,0,0,0); return dt;}
       function isoFromLocalDateStr(s){ const dt=parseLocalDateStr(s); return dt?dt.toISOString():null;}
@@ -34,7 +36,7 @@
       function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
       async function copyToClipboard(text){ try{ await navigator.clipboard.writeText(String(text||'')); alert("Copied!"); } catch{ alert("Copy failed"); } }
 
-      // API
+      /* ====== API ====== */
       async function apiGetState(companyId=null){
         const params = new URLSearchParams({ token: API_TOKEN });
         if (companyId) params.set('company_id', companyId);
@@ -54,12 +56,13 @@
         return res.json();
       }
 
-      // Icons (inline SVG)
-      const IconCheck = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>);
-      const IconPencil = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5h2m-7 14h14M12 7l5 5-7 7H5v-5l7-7z"/></svg>);
-      const IconTrash = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-7 0a1 1 0 011-1h4a1 1 0 011 1m-7 0h8"/></svg>);
-      const IconArrows = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h10M7 17h10M17 7l-3-3m3 3l-3 3M7 17l3-3m-3 3l3 3"/></svg>);
+      /* ====== ICONS ====== */
+      const IconCheck = (p)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>);
+      const IconPencil = (p)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5h2m-7 14h14M12 7l5 5-7 7H5v-5l7-7z"/></svg>);
+      const IconTrash = (p)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-7 0a1 1 0 011-1h4a1 1 0 011 1m-7 0h8"/></svg>);
+      const IconArrows = (p)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h10M7 17h10M17 7l-3-3m3 3l-3 3M7 17l3-3m-3 3l3 3"/></svg>);
 
+      /* ====== APP ====== */
       function App(){
         const [state,setState] = React.useState({ company:"1", companies:{} });
         const [ready,setReady] = React.useState(false);
@@ -70,7 +73,7 @@
         const [editUser,setEditUser]= React.useState(null);
         const [busyBtn,setBusyBtn]= React.useState(null);
         const [detailUser,setDetailUser]= React.useState(null);
-        const [transferFor,setTransferFor]= React.useState(null); // user id for menu
+        const [transferFor,setTransferFor]= React.useState(null);
         const pollRef = React.useRef(null);
 
         function switchCompany(co){ setState(s=>({...s, company:co})); }
@@ -89,12 +92,12 @@
           return companies;
         }
 
-        React.useEffect(()=>{ (async()=>{
+        useEffect(()=>{ (async()=>{
           const data=await apiGetState();
           setState({ company:"1", companies: mapApi(data) }); setReady(true);
         })().catch(e=>{ console.error(e); alert("API load error"); }); }, []);
 
-        React.useEffect(()=>{
+        useEffect(()=>{
           function start(){ if(pollRef.current) return;
             pollRef.current=setInterval(async()=>{
               try{ const data=await apiGetState(state.company);
@@ -122,7 +125,7 @@
         const current = state.companies[company] || { name: company==="1"?"Hidden":company==="2"?"Sara":"Other", users:[] };
         const users = current.users || [];
 
-        const filtered = React.useMemo(()=>{
+        const filtered = useMemo(()=>{
           const t=query.trim().toLowerCase();
           let arr=[...users];
           if(t) arr=arr.filter(u=> u.name.toLowerCase().includes(t) || String(u.note||'').toLowerCase().includes(t));
@@ -215,15 +218,13 @@
         async function transferUserLocal(u, target){
           try{
             setBusyBtn('transfer:'+u.id);
-            const res=await apiAction({ action:'transfer', id:u.id, target_company_id: target });
-            // rimuovi da lista corrente
+            await apiAction({ action:'transfer', id:u.id, target_company_id: target });
+            // remove from current list immediately
             updateCompanyUsers(arr=>{
               const i=arr.findIndex(x=>x.id===u.id);
               if(i>=0) arr.splice(i,1);
             });
             setTransferFor(null);
-            // opzionale: se stai guardando la target company, potresti aggiungerlo lì,
-            // ma è più semplice lasciarci il polling.
           } finally { setBusyBtn(null); }
         }
 
@@ -274,7 +275,8 @@
                 </div>
               </section>
 
-              <section className="bg-blue-50 rounded-2xl border border-blue-200 shadow-sm overflow-hidden">
+              <!-- overflow-visible to avoid clipping drop-downs -->
+              <section className="bg-blue-50 rounded-2xl border border-blue-200 shadow-sm overflow-visible">
                 <table className="w-full text-sm">
                   <thead className="bg-blue-100">
                     <tr className="text-blue-900">
@@ -283,8 +285,8 @@
                       <th className="text-left px-4 py-3">Renewal date</th>
                       <th className="text-left px-4 py-3">Days left</th>
                       <th className="text-left px-4 py-3">Business</th>
-                      <th className="text-left px-4 py-3">Note</th>
                       <th className="text-left px-4 py-3">Actions</th>
+                      <th className="text-left px-4 py-3">Note</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -296,7 +298,7 @@
                       const renewalStr=localDateStrFromISO(u.renewalISO);
                       const color = days<0 ? "text-red-600" : days<=3 ? "text-amber-600" : "text-emerald-700";
                       const rmKey='remove:'+u.id, paidKey='paid:'+u.id, trKey='transfer:'+u.id;
-                      const noteShort = (u.note||'').length>40 ? (u.note.slice(0,40)+'…') : (u.note||'');
+                      const noteShort = (u.note||'').length>80 ? (u.note.slice(0,80)+'…') : (u.note||'');
                       return (
                         <tr key={u.id} className="border-t border-blue-200 bg-white">
                           <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
@@ -306,7 +308,8 @@
                           <td className="px-4 py-3">
                             <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
                           </td>
-                          <td className="px-4 py-3 text-blue-900/80">{noteShort}</td>
+
+                          {/* ACTIONS (penultima) */}
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-1">
                               <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey}
@@ -323,17 +326,21 @@
                                   <IconArrows className="w-5 h-5" />
                                 </button>
                                 {transferFor===u.id && (
-                                  <div className="absolute z-20 mt-1 bg-white border border-blue-200 rounded-lg shadow px-2 py-2">
-                                    {[
-                                      {id:"1", lab:"to Hidden"},
-                                      {id:"2", lab:"to Sara"},
-                                      {id:"3", lab:"to Other"},
-                                    ].filter(t=>t.id!==company).map(t=>(
-                                      <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
-                                        className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
-                                        {t.lab}
-                                      </button>
-                                    ))}
+                                  <div className="absolute right-0 top-full translate-y-1 z-50 bg-white border border-blue-200 rounded-lg shadow px-2 py-2 w-40">
+                                    {busyBtn===trKey ? (
+                                      <div className="px-3 py-1.5 text-blue-900/70">Moving…</div>
+                                    ) : (
+                                      [
+                                        {id:"1", lab:"to Hidden"},
+                                        {id:"2", lab:"to Sara"},
+                                        {id:"3", lab:"to Other"},
+                                      ].filter(t=>t.id!==company).map(t=>(
+                                        <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
+                                          className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
+                                          {t.lab}
+                                        </button>
+                                      ))
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -343,6 +350,9 @@
                               </button>
                             </div>
                           </td>
+
+                          {/* NOTE (ultima) */}
+                          <td className="px-4 py-3 text-blue-900/80">{noteShort}</td>
                         </tr>
                       )
                     })}
@@ -367,24 +377,25 @@
         );
       }
 
+      /* ====== FORM ====== */
       function UserForm({ onClose, onSave, defaultValues, saving }){
         const isEdit = !!defaultValues;
-        const [name,setName]=React.useState(defaultValues?.name||"");
-        const [plan,setPlan]=React.useState(defaultValues?.plan||"2m");
-        const [renewalLocal,setRenewalLocal]=React.useState(
+        const [name,setName]=useState(defaultValues?.name||"");
+        const [plan,setPlan]=useState(defaultValues?.plan||"2m");
+        const [renewalLocal,setRenewalLocal]=useState(
           isEdit ? localDateStrFromISO(defaultValues.renewalISO) : formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))
         );
-        const [discord_id,setDiscord]=React.useState(defaultValues?.discord_id||"");
-        const [user_key,setUserKey]=React.useState(defaultValues?.user_key||"");
-        const [latest_paid_iso_str,setLatestPaid]=React.useState(defaultValues?.latest_paid_iso?localDateStrFromISO(defaultValues.latest_paid_iso):"");
-        const [stripe_customer_id,setStripe]=React.useState(defaultValues?.stripe_customer_id||"");
-        const [country,setCountry]=React.useState(defaultValues?.country||"");
-        const [vat_id,setVat]=React.useState(defaultValues?.vat_id||"");
-        const [note,setNote]=React.useState(defaultValues?.note||"");
-        const [status_invoice,setStatus]=React.useState(defaultValues?.status_invoice||"");
-        const [business,setBusiness]=React.useState(!!defaultValues?.business);
+        const [discord_id,setDiscord]=useState(defaultValues?.discord_id||"");
+        const [user_key,setUserKey]=useState(defaultValues?.user_key||"");
+        const [latest_paid_iso_str,setLatestPaid]=useState(defaultValues?.latest_paid_iso?localDateStrFromISO(defaultValues.latest_paid_iso):"");
+        const [stripe_customer_id,setStripe]=useState(defaultValues?.stripe_customer_id||"");
+        const [country,setCountry]=useState(defaultValues?.country||"");
+        const [vat_id,setVat]=useState(defaultValues?.vat_id||"");
+        const [note,setNote]=useState(defaultValues?.note||"");
+        const [status_invoice,setStatus]=useState(defaultValues?.status_invoice||"");
+        const [business,setBusiness]=useState(!!defaultValues?.business);
 
-        React.useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
+        useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
 
         function handleSubmit(e){
           e.preventDefault();
@@ -492,6 +503,7 @@
         );
       }
 
+      /* ====== DETAILS MODAL ====== */
       function DetailModal({ user, onClose }){
         const renewalStr = user.renewalISO?localDateStrFromISO(user.renewalISO):"";
         const latestPaid = user.latest_paid_iso?localDateStrFromISO(user.latest_paid_iso):"";
@@ -566,3 +578,4 @@
     </script>
   </body>
 </html>
+
