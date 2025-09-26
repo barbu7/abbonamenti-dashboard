@@ -17,7 +17,7 @@
 
     <script type="text/babel">
       /******** CONFIG FRONTEND ********/
-      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec"; // <-- incolla l'URL della Web App (deve finire con /exec)
+      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec"; // <-- incolla l'URL della Web App (termina con /exec)
       const API_TOKEN = "LoscoBotManagement";        // <-- lo stesso in Script Properties
 
       /******** UTILS ********/
@@ -30,14 +30,8 @@
         const yyyy = dt.getFullYear();
         return `${dd}/${mm}/${yyyy}`;
       }
-      function parseLocalDateStr(str) {
-        const [dd, mm, yyyy] = str.split("/").map((v) => parseInt(v, 10));
-        const dt = new Date(yyyy, mm - 1, dd);
-        dt.setHours(0, 0, 0, 0);
-        return dt;
-      }
-      function isoFromLocalDateStr(str) { return parseLocalDateStr(str).toISOString(); }
       function localDateStrFromISO(iso) { try { return formatLocalDate(new Date(iso)); } catch { return ""; } }
+      function startOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
       function addMonths(date, months) {
         const d = new Date(date); const day = d.getDate();
         d.setMonth(d.getMonth() + months);
@@ -81,7 +75,7 @@
         if (!res.ok) throw new Error('API state error');
         return res.json(); // { companies:[{id,name}], users:[...] }
       }
-      // IMPORTANTISSIMO: text/plain per evitare preflight CORS
+      // IMPORTANTISSIMO: text/plain per evitare preflight CORS di Apps Script
       async function apiAction(body) {
         body.token = API_TOKEN;
         const res = await fetch(API_URL, {
@@ -178,11 +172,14 @@
 
         // Azioni (tutte lato API)
         async function addUserLocal(user) {
-          await apiAction({ action:'create', company_id: company, name:user.name, plan:user.plan, renewal_iso:user.renewalISO });
+          // Calcola automaticamente la data di rinnovo partendo da OGGI e piano scelto
+          const renewalISO = addPlan(startOfTodayISO(), user.plan);
+          await apiAction({ action:'create', company_id: company, name:user.name, plan:user.plan, renewal_iso: renewalISO });
           await refreshState();
         }
         async function updateUserLocal(user) {
-          await apiAction({ action:'update', id:user.id, company_id: company, name:user.name, plan:user.plan, renewal_iso:user.renewalISO });
+          // In edit NON cambiamo la renewal; si cambierà con "Segna pagato" o manualmente dallo Sheet se necessario
+          await apiAction({ action:'update', id:user.id, company_id: company, name:user.name, plan:user.plan });
           await refreshState();
         }
         async function removeUserLocal(id) {
@@ -286,7 +283,7 @@
                 onClose={() => { setShowForm(false); setEditUser(null); }}
                 onSave={async (payload) => {
                   if (editUser) await updateUserLocal({ ...editUser, ...payload });
-                  else await addUserLocal({ id: Math.random().toString(36).slice(2), ...payload });
+                  else await addUserLocal(payload);
                   setShowForm(false); setEditUser(null);
                 }}
               />
@@ -296,19 +293,28 @@
       }
 
       function UserForm({ onClose, onSave, defaultValues }) {
-        const { useState } = React;
+        const { useState, useEffect } = React;
+        const isEdit = !!defaultValues;
         const [name, setName] = useState(defaultValues?.name || "");
         const [plan, setPlan] = useState(defaultValues?.plan || "2m");
-        const [renewal, setRenewal] = useState(
-          defaultValues ? localDateStrFromISO(defaultValues.renewalISO) : formatLocalDate(new Date())
-        );
+        // calcolo automatico preview scadenza (solo in "nuovo"): oggi + piano
+        const [previewISO, setPreviewISO] = useState(null);
+
+        useEffect(()=>{
+          if (!isEdit) {
+            setPreviewISO(addPlan(startOfTodayISO(), plan));
+          } else {
+            setPreviewISO(defaultValues.renewalISO);
+          }
+        }, [plan, isEdit]);
 
         function handleSubmit(e) {
           e.preventDefault();
           onSave({
             name: name.trim() || "Senza nome",
-            plan,
-            renewalISO: isoFromLocalDateStr(renewal),
+            plan
+            // NB: se è un "nuovo", la renewal viene calcolata nel caller (addUserLocal)
+            // se è "modifica", lasciamo invariata la renewal (si aggiorna con Segna pagato)
           });
         }
 
@@ -316,7 +322,7 @@
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
             <div className="w-full max-w-lg bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-neutral-800 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">{defaultValues ? "Modifica utente" : "Aggiungi utente"}</h2>
+                <h2 className="text-lg font-semibold">{isEdit ? "Modifica utente" : "Aggiungi utente"}</h2>
                 <button className="text-gray-500" onClick={onClose}>✕</button>
               </div>
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
@@ -336,17 +342,15 @@
                   </select>
                 </label>
 
-                <label className="grid gap-1">
-                  <span className="text-sm">Data rinnovo (dd/mm/yyyy)</span>
-                  <input
-                    className="px-3 py-2 border rounded-xl bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700"
-                    value={renewal}
-                    onChange={(e) => setRenewal(e.target.value)}
-                    placeholder="gg/mm/aaaa"
-                    pattern="^([0-2]?\\d|3[01])\\/(0?\\d|1[0-2])\\/\\d{4}$"
-                    required
-                  />
-                </label>
+                {/* Solo preview, niente input manuale */}
+                <div className="grid gap-1">
+                  <span className="text-sm">Prossima scadenza</span>
+                  <div className="px-3 py-2 rounded-xl border bg-gray-50 dark:bg-neutral-800 border-gray-200 dark:border-neutral-700">
+                    {previewISO ? formatLocalDate(previewISO) : '—'}
+                  </div>
+                  {!isEdit && <p className="text-xs text-gray-500 dark:text-gray-400">Viene calcolata automaticamente in base al piano.</p>}
+                  {isEdit && <p className="text-xs text-gray-500 dark:text-gray-400">Per aggiornare la scadenza usa “Segna pagato”.</p>}
+                </div>
 
                 <div className="flex items-center justify-end gap-2 mt-2">
                   <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700">Annulla</button>
