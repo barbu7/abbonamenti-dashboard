@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LOSCOBOT Dashboard abbonamenti</title>
+    <title>LOSCOBOT Subscriptions Dashboard</title>
     <link rel="icon" href="Losco_Bot.png">
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
@@ -20,51 +20,33 @@
 
       const { useState, useEffect, useMemo, useRef } = React;
 
-      // ---------- date & utils ----------
-      function formatLocalDate(d) {
-        const dt = d instanceof Date ? d : new Date(d);
-        const dd = String(dt.getDate()).padStart(2, "0");
-        const mm = String(dt.getMonth() + 1).padStart(2, "0");
-        const yyyy = dt.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
-      }
-      function parseLocalDateStr(str) {
-        const s = String(str || "").trim();
-        const m = s.match(/^(\d{1,2})[\/\-\.\s](\d{1,2})[\/\-\.\s](\d{4})$/);
-        if (!m) return null;
-        const dd = parseInt(m[1], 10);
-        const mm = parseInt(m[2], 10);
-        const yyyy = parseInt(m[3], 10);
-        const dt = new Date(yyyy, mm - 1, dd);
-        if (dt.getFullYear() !== yyyy || dt.getMonth() !== (mm - 1) || dt.getDate() !== dd) return null;
-        dt.setHours(0, 0, 0, 0);
-        return dt;
-      }
-      function isoFromLocalDateStr(str) { const dt = parseLocalDateStr(str); return dt ? dt.toISOString() : null; }
-      function localDateStrFromISO(iso) { try { return formatLocalDate(new Date(iso)); } catch { return ""; } }
+      // utils
+      function formatLocalDate(d){ const dt=d instanceof Date?d:new Date(d); const dd=String(dt.getDate()).padStart(2,"0"); const mm=String(dt.getMonth()+1).padStart(2,"0"); const yyyy=dt.getFullYear(); return `${dd}/${mm}/${yyyy}`;}
+      function parseLocalDateStr(str){ const s=String(str||"").trim(); const m=s.match(/^(\d{1,2})[\/\-\.\s](\d{1,2})[\/\-\.\s](\d{4})$/); if(!m)return null; const dd=+m[1], mm=+m[2], yyyy=+m[3]; const dt=new Date(yyyy,mm-1,dd); if(dt.getFullYear()!==yyyy||dt.getMonth()!==mm-1||dt.getDate()!==dd)return null; dt.setHours(0,0,0,0); return dt;}
+      function isoFromLocalDateStr(s){ const dt=parseLocalDateStr(s); return dt?dt.toISOString():null;}
+      function localDateStrFromISO(iso){ try{return formatLocalDate(new Date(iso));}catch{return "";} }
       function startOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
-      function addMonths(date, months) { const d = new Date(date); const day = d.getDate(); d.setMonth(d.getMonth() + months); if (d.getDate() !== day) d.setDate(0); d.setHours(0,0,0,0); return d; }
-      function addPlan(dateISO, plan) { const base = new Date(dateISO); const now = new Date(); now.setHours(0,0,0,0); const start = base >= now ? base : now; let extended; if (plan === "2m") extended = addMonths(start, 2); else if (plan === "6m") extended = addMonths(start, 6); else extended = addMonths(start, 12); return extended.toISOString(); }
-      function diffInDays(fromISO, toISO) { const a = new Date(fromISO); const b = new Date(toISO); a.setHours(0,0,0,0); b.setHours(0,0,0,0); return Math.round((b - a) / (1000*60*60*24)); }
+      function addMonths(date, months){ const d=new Date(date); const day=d.getDate(); d.setMonth(d.getMonth()+months); if(d.getDate()!==day)d.setDate(0); d.setHours(0,0,0,0); return d; }
+      function addPlan(dateISO, plan){ const base=new Date(dateISO); const now=new Date(); now.setHours(0,0,0,0); const start=base>=now?base:now; let m=12; if(plan==="2m")m=2; else if(plan==="6m")m=6; return addMonths(start,m).toISOString(); }
+      function diffInDays(fromISO,toISO){ const a=new Date(fromISO), b=new Date(toISO); a.setHours(0,0,0,0); b.setHours(0,0,0,0); return Math.round((b-a)/(1000*60*60*24)); }
       function endOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
-      function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
+      function planLabel(code){ return code==="2m"?"2 months":code==="6m"?"6 months":"1 year"; }
       function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
-      async function copyToClipboard(text){ try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); } catch { alert("Copia non riuscita"); } }
+      async function copyToClipboard(text){ try{ await navigator.clipboard.writeText(String(text||'')); alert("Copied!"); } catch{ alert("Copy failed"); } }
 
-      // ---------- API ----------
-      async function apiGetState(companyId=null) {
+      // API
+      async function apiGetState(companyId=null){
         const params = new URLSearchParams({ token: API_TOKEN });
         if (companyId) params.set('company_id', companyId);
-        const url = `${API_URL}?${params.toString()}`;
-        const res = await fetch(url);
+        const res = await fetch(`${API_URL}?${params.toString()}`);
         if (!res.ok) throw new Error('API state error');
         return res.json();
       }
-      async function apiAction(body) {
+      async function apiAction(body){
         body.token = API_TOKEN;
         const res = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type":"text/plain;charset=utf-8" },
+          method:"POST",
+          headers:{ "Content-Type":"text/plain;charset=utf-8" },
           body: JSON.stringify(body),
           keepalive: true,
         });
@@ -72,209 +54,202 @@
         return res.json();
       }
 
-      // ---------- App ----------
-      function App() {
-        const [state, setState] = useState({ company:"1", companies:{} });
-        const [ready, setReady] = useState(false);
-        const [query, setQuery] = useState("");
-        const [sortKey, setSortKey] = useState("renewal");
-        const [sortDir, setSortDir] = useState("asc");
-        const [showForm, setShowForm] = useState(false);
-        const [editUser, setEditUser] = useState(null);
-        const [busyBtn, setBusyBtn] = useState(null);
-        const [detailUser, setDetailUser] = useState(null);
-        const pollRef = useRef(null);
+      // Icons (inline SVG)
+      const IconCheck = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>);
+      const IconPencil = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5h2m-7 14h14M12 7l5 5-7 7H5v-5l7-7z"/></svg>);
+      const IconTrash = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-7 0a1 1 0 011-1h4a1 1 0 011 1m-7 0h8"/></svg>);
+      const IconArrows = (props)=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h10M7 17h10M17 7l-3-3m3 3l-3 3M7 17l3-3m-3 3l3 3"/></svg>);
 
-        function switchCompany(co){ setState(s=> ({ ...s, company: co })); }
+      function App(){
+        const [state,setState] = React.useState({ company:"1", companies:{} });
+        const [ready,setReady] = React.useState(false);
+        const [query,setQuery] = React.useState("");
+        const [sortKey,setSortKey]= React.useState("renewal");
+        const [sortDir,setSortDir]= React.useState("asc");
+        const [showForm,setShowForm]= React.useState(false);
+        const [editUser,setEditUser]= React.useState(null);
+        const [busyBtn,setBusyBtn]= React.useState(null);
+        const [detailUser,setDetailUser]= React.useState(null);
+        const [transferFor,setTransferFor]= React.useState(null); // user id for menu
+        const pollRef = React.useRef(null);
 
-        function mapApiToCompanies(data){
-          const companies = {};
-          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-          data.users.forEach(u => {
-            (companies[u.company_id] ??= { name: u.company_id, users: [] }).users.push({
-              id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
-              discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
-              stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-              note: u.note, status_invoice: u.status_invoice, business: !!u.business
+        function switchCompany(co){ setState(s=>({...s, company:co})); }
+
+        function mapApi(data){
+          const companies={};
+          data.companies.forEach(c=>companies[c.id]={ name:c.name, users:[] });
+          data.users.forEach(u=>{
+            (companies[u.company_id] ??= {name:u.company_id, users:[]}).users.push({
+              id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso,
+              discord_id:u.discord_id, user_key:u.user_key, latest_paid_iso:u.latest_paid_iso,
+              stripe_customer_id:u.stripe_customer_id, country:u.country, vat_id:u.vat_id,
+              note:u.note, status_invoice:u.status_invoice, business:!!u.business
             });
           });
           return companies;
         }
 
-        useEffect(() => {
-          (async () => {
-            const data = await apiGetState();
-            setState({ company:"1", companies: mapApiToCompanies(data) });
-            setReady(true);
-          })().catch(err => { console.error(err); alert("Errore nel caricare i dati dall'API."); });
-        }, []);
+        React.useEffect(()=>{ (async()=>{
+          const data=await apiGetState();
+          setState({ company:"1", companies: mapApi(data) }); setReady(true);
+        })().catch(e=>{ console.error(e); alert("API load error"); }); }, []);
 
-        // polling sicuro
-        useEffect(() => {
-          function startPoll(){
-            if (pollRef.current) return;
-            pollRef.current = setInterval(async () => {
-              try {
-                const data = await apiGetState(state.company);
-                const mapped = mapApiToCompanies(data);
-                const co = mapped[state.company] || { name: state.company==="1" ? "Hidden" : "Sara", users: [] };
-                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: co } }));
-              } catch (e) { console.warn("Polling error", e); }
+        React.useEffect(()=>{
+          function start(){ if(pollRef.current) return;
+            pollRef.current=setInterval(async()=>{
+              try{ const data=await apiGetState(state.company);
+                const mapped=mapApi(data);
+                const co=mapped[state.company] || { name: state.company==="1"?"Hidden":state.company==="2"?"Sara":"Other", users:[] };
+                setState(s=>({...s, companies:{ ...s.companies, [state.company]: co }}));
+              }catch(e){ console.warn("poll error",e); }
             }, 60000);
           }
-          function stopPoll(){ if (pollRef.current){ clearInterval(pollRef.current); pollRef.current = null; } }
+          function stop(){ if(pollRef.current){ clearInterval(pollRef.current); pollRef.current=null; } }
           async function onVis(){
-            if (document.visibilityState === 'visible') {
-              try {
-                const data = await apiGetState(state.company);
-                const mapped = mapApiToCompanies(data);
-                const co = mapped[state.company] || { name: state.company==="1" ? "Hidden" : "Sara", users: [] };
-                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: co } }));
-              } catch{}
-              startPoll();
-            } else { stopPoll(); }
+            if(document.visibilityState==='visible'){ try{
+              const data=await apiGetState(state.company);
+              const mapped=mapApi(data);
+              const co=mapped[state.company] || { name: state.company==="1"?"Hidden":state.company==="2"?"Sara":"Other", users:[] };
+              setState(s=>({...s, companies:{ ...s.companies, [state.company]: co }}));
+            }catch{} start(); } else { stop(); }
           }
-          document.addEventListener('visibilitychange', onVis);
-          if (document.visibilityState === 'visible') startPoll();
-          return () => { document.removeEventListener('visibilitychange', onVis); stopPoll(); };
+          document.addEventListener('visibilitychange',onVis);
+          if(document.visibilityState==='visible') start();
+          return ()=>{ document.removeEventListener('visibilitychange',onVis); stop(); }
         }, [state.company]);
 
         const company = state.company;
-        const current = state.companies[company] || { name: company==="1"?"Hidden":"Sara", users: [] };
+        const current = state.companies[company] || { name: company==="1"?"Hidden":company==="2"?"Sara":"Other", users:[] };
         const users = current.users || [];
 
-        const filtered = useMemo(() => {
-          const t = query.trim().toLowerCase();
-          let arr = [...users];
-          if (t) arr = arr.filter((u) => u.name.toLowerCase().includes(t));
-          arr.sort((a, b) => {
-            if (sortKey === "name") return sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-            const da = new Date(a.renewalISO).getTime();
-            const db = new Date(b.renewalISO).getTime();
-            return sortDir === "asc" ? da - db : db - da;
+        const filtered = React.useMemo(()=>{
+          const t=query.trim().toLowerCase();
+          let arr=[...users];
+          if(t) arr=arr.filter(u=> u.name.toLowerCase().includes(t) || String(u.note||'').toLowerCase().includes(t));
+          arr.sort((a,b)=>{
+            if (sortKey==="name") return sortDir==="asc"?a.name.localeCompare(b.name):b.name.localeCompare(a.name);
+            const da=new Date(a.renewalISO).getTime(), db=new Date(b.renewalISO).getTime();
+            return sortDir==="asc"? da-db : db-da;
           });
           return arr;
-        }, [users, query, sortKey, sortDir]);
+        }, [users,query,sortKey,sortDir]);
 
-        function updateCompanyUsers(updater) {
-          setState(s => {
-            const companies = { ...s.companies };
-            const coId = s.company;
-            const co = { ...companies[coId], users: [...(companies[coId]?.users || [])] };
+        function updateCompanyUsers(updater){
+          setState(s=>{
+            const companies={...s.companies};
+            const coId=s.company;
+            const co={ ...companies[coId], users:[...(companies[coId]?.users||[])] };
             updater(co.users);
-            companies[coId] = co;
-            return { ...s, companies };
+            companies[coId]=co;
+            return {...s, companies};
           });
         }
 
-        async function addUserLocal(user) {
-          try {
+        async function addUserLocal(user){
+          try{
             setBusyBtn('add');
-            const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
-            const renewalISO = manualISO || addPlan(startOfTodayISO(), user.plan);
-            const res = await apiAction({ action: 'create', company_id: company,
-              name: user.name, plan: user.plan, renewal_iso: renewalISO,
-              discord_id: user.discord_id||'', user_key: user.user_key||'',
-              latest_paid_iso: user.latest_paid_iso||'', stripe_customer_id: user.stripe_customer_id||'',
-              country: user.country||'', vat_id: user.vat_id||'', note: user.note||'',
-              status_invoice: user.status_invoice||'', business: !!user.business
+            const manualISO=isoFromLocalDateStr(user.renewalLocal||"");
+            const renewalISO= manualISO || addPlan(startOfTodayISO(), user.plan);
+            const res=await apiAction({ action:'create', company_id: company,
+              name:user.name, plan:user.plan, renewal_iso: renewalISO,
+              discord_id:user.discord_id||'', user_key:user.user_key||'',
+              latest_paid_iso:user.latest_paid_iso||'', stripe_customer_id:user.stripe_customer_id||'',
+              country:user.country||'', vat_id:user.vat_id||'', note:user.note||'',
+              status_invoice:user.status_invoice||'', business:!!user.business
             });
-            const u = res.user;
-            updateCompanyUsers(arr => {
-              arr.push({
-                id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
-                discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
-                stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-                note: u.note, status_invoice: u.status_invoice, business: !!u.business
-              });
+            const u=res.user;
+            updateCompanyUsers(arr=>{
+              arr.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso,
+                discord_id:u.discord_id, user_key:u.user_key, latest_paid_iso:u.latest_paid_iso,
+                stripe_customer_id:u.stripe_customer_id, country:u.country, vat_id:u.vat_id,
+                note:u.note, status_invoice:u.status_invoice, business:!!u.business });
             });
           } finally { setBusyBtn(null); }
         }
 
-        async function updateUserLocal(user) {
-          try {
+        async function updateUserLocal(user){
+          try{
             setBusyBtn('edit');
-            const payload = {
-              action: 'update', id: user.id, company_id: company,
-              name: user.name, plan: user.plan
-            };
-            const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
-            if (manualISO) payload.renewal_iso = manualISO;
+            const payload={ action:'update', id:user.id, company_id: company,
+              name:user.name, plan:user.plan };
+            const manualISO=isoFromLocalDateStr(user.renewalLocal||"");
+            if(manualISO) payload.renewal_iso=manualISO;
             ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status_invoice','business']
-              .forEach(k => { if (user[k] !== undefined) payload[k] = k==='business' ? !!user[k] : user[k]; });
-
-            const res = await apiAction(payload);
-            const u = res.user || { ...user, renewal_iso: manualISO || user.renewalISO };
-            updateCompanyUsers(arr => {
-              const i = arr.findIndex(x => x.id === u.id);
-              if (i >= 0) arr[i] = {
-                id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso || arr[i].renewalISO,
-                discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
-                stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-                note: u.note, status_invoice: u.status_invoice, business: !!u.business
-              };
+              .forEach(k=>{ if(user[k]!==undefined) payload[k]=k==='business' ? !!user[k] : user[k]; });
+            const res=await apiAction(payload);
+            const u=res.user || { ...user, renewal_iso: manualISO || user.renewalISO };
+            updateCompanyUsers(arr=>{
+              const i=arr.findIndex(x=>x.id===u.id);
+              if(i>=0) arr[i]={ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso||arr[i].renewalISO,
+                discord_id:u.discord_id, user_key:u.user_key, latest_paid_iso:u.latest_paid_iso,
+                stripe_customer_id:u.stripe_customer_id, country:u.country, vat_id:u.vat_id,
+                note:u.note, status_invoice:u.status_invoice, business:!!u.business };
             });
           } finally { setBusyBtn(null); }
         }
 
-        async function removeUserLocal(id) {
-          try {
+        async function removeUserLocal(id){
+          if(!confirm("Delete this user permanently?")) return;
+          try{
             setBusyBtn('remove:'+id);
-            await apiAction({ action: 'delete', id });
-            updateCompanyUsers(arr => {
-              const i = arr.findIndex(x => x.id === id);
-              if (i >= 0) arr.splice(i, 1);
+            await apiAction({ action:'delete', id });
+            updateCompanyUsers(arr=>{
+              const i=arr.findIndex(x=>x.id===id);
+              if(i>=0) arr.splice(i,1);
             });
           } finally { setBusyBtn(null); }
         }
 
-        async function markPaidLocal(u) {
-          try {
+        async function markPaidLocal(u){
+          try{
             setBusyBtn('paid:'+u.id);
-            const res = await apiAction({ action: 'mark_paid', id: u.id });
-            const nu = res.user; // {id, renewal_iso, latest_paid_iso}
-            updateCompanyUsers(arr => {
-              const i = arr.findIndex(x => x.id === u.id);
-              if (i >= 0) arr[i] = { ...arr[i], renewalISO: nu.renewal_iso, latest_paid_iso: nu.latest_paid_iso };
+            const res=await apiAction({ action:'mark_paid', id:u.id });
+            const nu=res.user;
+            updateCompanyUsers(arr=>{
+              const i=arr.findIndex(x=>x.id===u.id);
+              if(i>=0) arr[i]={ ...arr[i], renewalISO: nu.renewal_iso, latest_paid_iso: nu.latest_paid_iso };
             });
           } finally { setBusyBtn(null); }
         }
 
-        if (!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Caricamento…</div>;
+        async function transferUserLocal(u, target){
+          try{
+            setBusyBtn('transfer:'+u.id);
+            const res=await apiAction({ action:'transfer', id:u.id, target_company_id: target });
+            // rimuovi da lista corrente
+            updateCompanyUsers(arr=>{
+              const i=arr.findIndex(x=>x.id===u.id);
+              if(i>=0) arr.splice(i,1);
+            });
+            setTransferFor(null);
+            // opzionale: se stai guardando la target company, potresti aggiungerlo lì,
+            // ma è più semplice lasciarci il polling.
+          } finally { setBusyBtn(null); }
+        }
+
+        if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
 
         return (
           <div className="min-h-screen">
             <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
               <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
-                {/* LOGO + TITOLO */}
                 <a href="./" className="flex items-center gap-3">
-                  <img
-                    src="Losco_Bot.png"
-                    alt="LOSCOBOT"
-                    className="h-9 w-9 rounded-md shadow-sm select-none"
-                    draggable="false"
-                    width="36"
-                    height="36"
-                  />
-                  <span className="text-2xl font-bold drop-shadow">
-                    LOSCOBOT Dashboard abbonamenti
-                  </span>
+                  <img src="Losco_Bot.png" alt="LOSCOBOT" className="h-9 w-9 rounded-md shadow-sm select-none" draggable="false" width="36" height="36" />
+                  <span className="text-2xl font-bold drop-shadow">LOSCOBOT Subscriptions Dashboard</span>
                 </a>
-
-                {/* SWITCH COMPANY */}
                 <div className="flex items-center gap-2">
-                  <button
-                    className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
-                    onClick={() => switchCompany("1")}
-                  >
-                    Hidden
-                  </button>
-                  <button
-                    className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
-                    onClick={() => switchCompany("2")}
-                  >
-                    Sara
-                  </button>
+                  {[
+                    {id:"1", label:"Hidden"},
+                    {id:"2", label:"Sara"},
+                    {id:"3", label:"Other"},
+                  ].map(tab=>(
+                    <button key={tab.id}
+                      className={`px-3 py-1 rounded-full border border-white/30 ${company===tab.id ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                      onClick={()=>switchCompany(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </header>
@@ -283,20 +258,18 @@
               <section className="mb-6 grid gap-3 md:grid-cols-3">
                 <div className="col-span-2 flex flex-wrap items-center gap-2">
                   <input className="w-64 px-3 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
-                         placeholder="Cerca per nome…" value={query} onChange={(e) => setQuery(e.target.value)} />
-                  <label className="text-sm text-blue-900/80">Ordina per:</label>
-                  <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white"
-                          value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-                    <option value="renewal">Data rinnovo</option>
-                    <option value="name">Nome</option>
+                         placeholder="Search by name or note…" value={query} onChange={(e)=>setQuery(e.target.value)} />
+                  <label className="text-sm text-blue-900/80">Sort by:</label>
+                  <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white" value={sortKey} onChange={(e)=>setSortKey(e.target.value)}>
+                    <option value="renewal">Renewal date</option>
+                    <option value="name">Name</option>
                   </select>
-                  <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white"
-                          value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                  <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white" value={sortDir} onChange={(e)=>setSortDir(e.target.value)}>
                     <option value="asc">Asc</option>
                     <option value="desc">Desc</option>
                   </select>
-                  <button onClick={() => { setEditUser(null); setShowForm(true); }} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
-                    {busyBtn==='add' ? 'Aggiungo…' : '➕ Aggiungi utente'}
+                  <button onClick={()=>{ setEditUser(null); setShowForm(true); }} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
+                    {busyBtn==='add' ? 'Saving…' : '➕ Add user'}
                   </button>
                 </div>
               </section>
@@ -305,50 +278,73 @@
                 <table className="w-full text-sm">
                   <thead className="bg-blue-100">
                     <tr className="text-blue-900">
-                      <th className="text-left px-4 py-3">Nome</th>
-                      <th className="text-left px-4 py-3">Piano</th>
-                      <th className="text-left px-4 py-3">Data rinnovo</th>
-                      <th className="text-left px-4 py-3">Giorni rim.</th>
-                      <th className="text-left px-4 py-3">Azioni</th>
+                      <th className="text-left px-4 py-3">Name</th>
+                      <th className="text-left px-4 py-3">Plan</th>
+                      <th className="text-left px-4 py-3">Renewal date</th>
+                      <th className="text-left px-4 py-3">Days left</th>
                       <th className="text-left px-4 py-3">Business</th>
+                      <th className="text-left px-4 py-3">Note</th>
+                      <th className="text-left px-4 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={6} className="px-4 py-8 text-center text-blue-900/60">Nessun utente</td></tr>
+                    {filtered.length===0 && (
+                      <tr><td colSpan={7} className="px-4 py-8 text-center text-blue-900/60">No users</td></tr>
                     )}
-                    {filtered.map((u) => {
-                      const days = diffInDays(endOfTodayISO(), u.renewalISO);
-                      const renewalStr = localDateStrFromISO(u.renewalISO);
-                      const color = days < 0 ? "text-red-600" : days <= 3 ? "text-amber-600" : "text-emerald-700";
-                      const rmKey = 'remove:'+u.id;
-                      const paidKey = 'paid:'+u.id;
+                    {filtered.map(u=>{
+                      const days=diffInDays(endOfTodayISO(), u.renewalISO);
+                      const renewalStr=localDateStrFromISO(u.renewalISO);
+                      const color = days<0 ? "text-red-600" : days<=3 ? "text-amber-600" : "text-emerald-700";
+                      const rmKey='remove:'+u.id, paidKey='paid:'+u.id, trKey='transfer:'+u.id;
+                      const noteShort = (u.note||'').length>40 ? (u.note.slice(0,40)+'…') : (u.note||'');
                       return (
                         <tr key={u.id} className="border-t border-blue-200 bg-white">
-                          <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer"
-                              onClick={()=> setDetailUser(u)}>{u.name}</td>
+                          <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
                           <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>
                           <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>
                           <td className={`px-4 py-3 font-semibold ${color}`}>{days}</td>
                           <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-2">
-                              <button onClick={() => markPaidLocal(u)} disabled={busyBtn===paidKey}
-                                      className={`px-3 py-1.5 rounded-lg text-white ${busyBtn===paidKey?'bg-emerald-400':'bg-emerald-600 hover:opacity-95'}`}>
-                                {busyBtn===paidKey ? 'Aggiorno…' : 'Segna pagato'}
+                            <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
+                          </td>
+                          <td className="px-4 py-3 text-blue-900/80">{noteShort}</td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-1">
+                              <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey}
+                                className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===paidKey?'bg-emerald-400':'bg-emerald-600 hover:opacity-90'}`}>
+                                <IconCheck className="w-5 h-5" />
                               </button>
-                              <button onClick={() => { setEditUser(u); setShowForm(true); }}
-                                      className="px-3 py-1.5 rounded-lg bg-blue-700 text-white">Modifica</button>
-                              <button onClick={() => removeUserLocal(u.id)} disabled={busyBtn===rmKey}
-                                      className={`px-3 py-1.5 rounded-lg bg-white border border-blue-200 ${busyBtn===rmKey?'opacity-50':'hover:bg-blue-50'}`}>
-                                {busyBtn===rmKey ? 'Rimuovo…' : 'Rimuovi'}
+                              <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
+                                className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90">
+                                <IconPencil className="w-5 h-5" />
+                              </button>
+                              <div className="relative">
+                                <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)} disabled={busyBtn===trKey}
+                                  className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-500 text-white hover:opacity-90">
+                                  <IconArrows className="w-5 h-5" />
+                                </button>
+                                {transferFor===u.id && (
+                                  <div className="absolute z-20 mt-1 bg-white border border-blue-200 rounded-lg shadow px-2 py-2">
+                                    {[
+                                      {id:"1", lab:"to Hidden"},
+                                      {id:"2", lab:"to Sara"},
+                                      {id:"3", lab:"to Other"},
+                                    ].filter(t=>t.id!==company).map(t=>(
+                                      <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
+                                        className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
+                                        {t.lab}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <button title="Delete" onClick={()=>removeUserLocal(u.id)} disabled={busyBtn===rmKey}
+                                className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===rmKey?'bg-red-400':'bg-red-600 hover:opacity-90'}`}>
+                                <IconTrash className="w-5 h-5" />
                               </button>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-block w-3 h-3 rounded-full ${u.business ? 'bg-emerald-500' : 'bg-red-500'}`} title={u.business ? 'Sì' : 'No'}></span>
-                          </td>
                         </tr>
-                      );
+                      )
                     })}
                   </tbody>
                 </table>
@@ -357,180 +353,137 @@
 
             {showForm && (
               <UserForm
-                defaultValues={editUser || undefined}
-                onClose={() => { setShowForm(false); setEditUser(null); }}
-                onSave={async (payload) => {
-                  if (editUser) await updateUserLocal({ ...editUser, ...payload });
-                  else await addUserLocal(payload);
-                  setShowForm(false); setEditUser(null);
-                }}
+                defaultValues={editUser||undefined}
+                onClose={()=>{ setShowForm(false); setEditUser(null); }}
+                onSave={async (payload)=>{ if(editUser) await updateUserLocal({ ...editUser, ...payload }); else await addUserLocal(payload); setShowForm(false); setEditUser(null); }}
                 saving={busyBtn==='add' || busyBtn==='edit'}
               />
             )}
 
             {detailUser && (
-              <DetailModal
-                user={detailUser}
-                onClose={()=> setDetailUser(null)}
-              />
+              <DetailModal user={detailUser} onClose={()=> setDetailUser(null)} />
             )}
           </div>
         );
       }
 
-      // ---------- Modale Aggiungi/Modifica ----------
-      function UserForm({ onClose, onSave, defaultValues, saving }) {
-        const { useState, useEffect } = React;
+      function UserForm({ onClose, onSave, defaultValues, saving }){
         const isEdit = !!defaultValues;
-        const [name, setName] = useState(defaultValues?.name || "");
-        const [plan, setPlan] = useState(defaultValues?.plan || "2m");
-        const [renewalLocal, setRenewalLocal] = useState(
-          isEdit ? localDateStrFromISO(defaultValues.renewalISO)
-                 : formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))
+        const [name,setName]=React.useState(defaultValues?.name||"");
+        const [plan,setPlan]=React.useState(defaultValues?.plan||"2m");
+        const [renewalLocal,setRenewalLocal]=React.useState(
+          isEdit ? localDateStrFromISO(defaultValues.renewalISO) : formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))
         );
-        const [discord_id, setDiscordId] = useState(defaultValues?.discord_id || "");
-        const [user_key, setUserKey] = useState(defaultValues?.user_key || "");
-        const [latest_paid_iso_str, setLatestPaid] = useState(defaultValues?.latest_paid_iso ? localDateStrFromISO(defaultValues.latest_paid_iso) : "");
-        const [stripe_customer_id, setStripeId] = useState(defaultValues?.stripe_customer_id || "");
-        const [country, setCountry] = useState(defaultValues?.country || "");
-        const [vat_id, setVat] = useState(defaultValues?.vat_id || "");
-        const [note, setNote] = useState(defaultValues?.note || "");
-        const [status_invoice, setStatusInvoice] = useState(defaultValues?.status_invoice || "");
-        const [business, setBusiness] = useState(!!defaultValues?.business);
+        const [discord_id,setDiscord]=React.useState(defaultValues?.discord_id||"");
+        const [user_key,setUserKey]=React.useState(defaultValues?.user_key||"");
+        const [latest_paid_iso_str,setLatestPaid]=React.useState(defaultValues?.latest_paid_iso?localDateStrFromISO(defaultValues.latest_paid_iso):"");
+        const [stripe_customer_id,setStripe]=React.useState(defaultValues?.stripe_customer_id||"");
+        const [country,setCountry]=React.useState(defaultValues?.country||"");
+        const [vat_id,setVat]=React.useState(defaultValues?.vat_id||"");
+        const [note,setNote]=React.useState(defaultValues?.note||"");
+        const [status_invoice,setStatus]=React.useState(defaultValues?.status_invoice||"");
+        const [business,setBusiness]=React.useState(!!defaultValues?.business);
 
-        useEffect(()=>{
-          if (!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan))));
-        }, [plan, isEdit]);
+        React.useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
 
-        function handleSubmit(e) {
+        function handleSubmit(e){
           e.preventDefault();
-          const dt = parseLocalDateStr(renewalLocal);
-          if (!dt) return alert("Inserisci la data rinnovo come gg/mm/aaaa");
-          let latestISO = '';
-          if (latest_paid_iso_str) {
-            const d2 = parseLocalDateStr(latest_paid_iso_str);
-            if (!d2) return alert("Latest paid: usa gg/mm/aaaa");
-            latestISO = d2.toISOString();
+          const dt=parseLocalDateStr(renewalLocal);
+          if(!dt) return alert("Renewal date must be dd/mm/yyyy");
+          let latestISO='';
+          if(latest_paid_iso_str){
+            const d2=parseLocalDateStr(latest_paid_iso_str);
+            if(!d2) return alert("Latest paid must be dd/mm/yyyy");
+            latestISO=d2.toISOString();
           }
           onSave({
-            name: name.trim() || "Senza nome",
-            plan,
-            renewalLocal,
+            name:name.trim()||"Unnamed",
+            plan, renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
             country, vat_id, note, status_invoice, business
           });
         }
 
-        const datePattern = "(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
+        const datePattern="(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
 
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-blue-200">
-              <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-blue-900">{isEdit ? "Modifica utente" : "Aggiungi utente"}</h2>
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+            <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-blue-200 max-h-[85vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between sticky top-0">
+                <h2 className="text-lg font-semibold text-blue-900">{isEdit ? "Edit user" : "Add user"}</h2>
                 <button className="text-blue-700" onClick={onClose} disabled={!!saving}>✕</button>
               </div>
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
-                <fieldset disabled={!!saving} className={saving ? "opacity-60" : ""}>
+                <fieldset disabled={!!saving} className={saving?"opacity-60":""}>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Nome</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={name} onChange={(e) => setName(e.target.value)} required />
+                      <span className="text-sm text-blue-900/90">Name</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={name} onChange={e=>setName(e.target.value)} required />
                     </label>
 
                     <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Piano</span>
-                      <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                              value={plan} onChange={(e) => setPlan(e.target.value)}>
-                        <option value="2m">2 mesi</option>
-                        <option value="6m">6 mesi</option>
-                        <option value="1y">1 anno</option>
+                      <span className="text-sm text-blue-900/90">Plan</span>
+                      <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={plan} onChange={e=>setPlan(e.target.value)}>
+                        <option value="2m">2 months</option>
+                        <option value="6m">6 months</option>
+                        <option value="1y">1 year</option>
                       </select>
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Discord ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={discord_id} onChange={(e)=>setDiscordId(e.target.value)} />
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={discord_id} onChange={e=>setDiscord(e.target.value)} />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">User Key</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={user_key} onChange={(e)=>setUserKey(e.target.value)} />
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={user_key} onChange={e=>setUserKey(e.target.value)} />
                     </label>
 
                     <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Data rinnovo</span>
-                      <input
-                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                        value={renewalLocal}
-                        onChange={(e)=>setRenewalLocal(e.target.value)}
-                        placeholder="gg/mm/aaaa"
-                        pattern={datePattern}
-                        required
-                      />
+                      <span className="text-sm text-blue-900/90">Renewal date</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={renewalLocal} onChange={e=>setRenewalLocal(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Latest paid</span>
-                      <input
-                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                        value={latest_paid_iso_str}
-                        onChange={(e)=>setLatestPaid(e.target.value)}
-                        placeholder="gg/mm/aaaa"
-                        pattern={datePattern}
-                      />
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={latest_paid_iso_str} onChange={e=>setLatestPaid(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                      <input
-                        type="url"
-                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                        value={stripe_customer_id}
-                        onChange={(e)=>setStripeId(e.target.value)}
-                      />
+                      <input type="url" className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={stripe_customer_id} onChange={e=>setStripe(e.target.value)} />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Country</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={country} onChange={(e)=>setCountry(e.target.value)} />
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={country} onChange={e=>setCountry(e.target.value)} />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">VAT ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={vat_id} onChange={(e)=>setVat(e.target.value)} />
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
                     </label>
 
                     <label className="grid gap-2">
-                      <span className="text-sm text-blue-900/90">Status invoice</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={status_invoice} onChange={(e)=>setStatusInvoice(e.target.value)} />
+                      <span className="text-sm text-blue-900/90">Invoice status</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
                     </label>
 
-                    {/* Business flag */}
                     <label className="flex items-center gap-2">
-                      <input type="checkbox" className="w-5 h-5"
-                             checked={business} onChange={(e)=>setBusiness(e.target.checked)} />
+                      <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
                       <span className="text-blue-900/90">Business</span>
                     </label>
 
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
-                      <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3"
-                                value={note} onChange={(e)=>setNote(e.target.value)} />
+                      <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
                     </label>
                   </div>
 
                   <div className="flex items-center justify-end gap-2 mt-2">
-                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Annulla</button>
-                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">
-                      {saving ? "Salvo…" : "Salva"}
-                    </button>
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
+                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">{saving ? "Saving…" : "Save"}</button>
                   </div>
                 </fieldset>
               </form>
@@ -539,46 +492,40 @@
         );
       }
 
-      // ---------- Modale Dettagli (solo lettura) ----------
-      function DetailModal({ user, onClose }) {
-        const renewalStr    = user.renewalISO      ? localDateStrFromISO(user.renewalISO)      : "";
-        const latestPaidStr = user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : "";
-        const business = !!user.business;
+      function DetailModal({ user, onClose }){
+        const renewalStr = user.renewalISO?localDateStrFromISO(user.renewalISO):"";
+        const latestPaid = user.latest_paid_iso?localDateStrFromISO(user.latest_paid_iso):"";
+        const business   = !!user.business;
 
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
-            <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl border border-blue-200">
-              <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-blue-900">Dettagli utente</h2>
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+            <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl border border-blue-200 max-h-[85vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between sticky top-0">
+                <h2 className="text-lg font-semibold text-blue-900">User details</h2>
                 <button className="text-blue-700" onClick={onClose}>✕</button>
               </div>
 
               <div className="px-6 py-5 grid gap-4">
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <ReadRow label="Nome" value={user.name} />
-                  <ReadRow label="Piano" value={user.plan === "2m" ? "2 mesi" : user.plan === "6m" ? "6 mesi" : "1 anno"} />
-
+                  <ReadRow label="Name" value={user.name} />
+                  <ReadRow label="Plan" value={planLabel(user.plan)} />
                   <ReadRow label="Next renewal" value={renewalStr} />
-                  <ReadRow label="Latest paid" value={latestPaidStr} />
-
+                  <ReadRow label="Latest paid" value={latestPaid} />
                   <ReadRow label="Discord ID" value={user.discord_id || ""} />
-                  <ReadRow label="User Key"   value={user.user_key   || ""} />
+                  <ReadRow label="User Key" value={user.user_key || ""} />
 
-                  {/* Stripe con Apri/Copia solo qui */}
                   <div className="grid gap-1 sm:col-span-2">
                     <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
                     <div className="flex gap-2">
                       <input className="flex-1 px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" value={user.stripe_customer_id || ""} readOnly />
-                      {isUrl(user.stripe_customer_id) && (
-                        <a href={user.stripe_customer_id} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-blue-600 text-white">Apri</a>
-                      )}
-                      <button type="button" onClick={()=>copyToClipboard(user.stripe_customer_id)} className="px-3 py-2 rounded-xl bg-blue-700 text-white">Copia</button>
+                      {isUrl(user.stripe_customer_id) && <a href={user.stripe_customer_id} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-blue-600 text-white">Open</a>}
+                      <button type="button" onClick={()=>copyToClipboard(user.stripe_customer_id)} className="px-3 py-2 rounded-xl bg-blue-700 text-white">Copy</button>
                     </div>
                   </div>
 
                   <ReadRow label="Country" value={user.country || ""} />
-                  <ReadRow label="VAT ID"  value={user.vat_id  || ""} />
-                  <ReadRow label="Status invoice" value={user.status_invoice || ""} />
+                  <ReadRow label="VAT ID" value={user.vat_id || ""} />
+                  <ReadRow label="Invoice status" value={user.status_invoice || ""} />
 
                   <div className="grid gap-1">
                     <span className="text-sm text-blue-900/90">Business</span>
@@ -597,7 +544,7 @@
                 </div>
 
                 <div className="flex items-center justify-end mt-2">
-                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Chiudi</button>
+                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Close</button>
                 </div>
               </div>
             </div>
@@ -605,7 +552,7 @@
         );
       }
 
-      function ReadRow({ label, value }) {
+      function ReadRow({ label, value }){
         return (
           <div className="grid gap-1">
             <span className="text-sm text-blue-900/90">{label}</span>
@@ -614,9 +561,8 @@
         );
       }
 
-      const root = ReactDOM.createRoot(document.getElementById("root"));
+      const root=ReactDOM.createRoot(document.getElementById("root"));
       root.render(<App />);
     </script>
   </body>
 </html>
-
