@@ -17,8 +17,8 @@
 
     <script type="text/babel">
       /******** CONFIG FRONTEND ********/
-      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec"; // <-- incolla qui l'URL della Web App (termina con /exec)
-      const API_TOKEN = "LoscoBotManagement";        // <-- lo stesso impostato in Script Properties
+      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec"; // <-- incolla l'URL della Web App (deve finire con /exec)
+      const API_TOKEN = "LoscoBotManagement";        // <-- lo stesso in Script Properties
 
       /******** UTILS ********/
       const { useState, useEffect, useMemo } = React;
@@ -63,16 +63,15 @@
       function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
 
       // Tema
-      function setTheme(mode){
-        const el = document.documentElement;
-        if (mode === 'dark') el.classList.add('dark');
-        else el.classList.remove('dark');
+      function applyTheme(mode){
+        const html = document.documentElement;
+        if (mode === 'dark') html.classList.add('dark');
+        else html.classList.remove('dark');
         localStorage.setItem('theme', mode);
       }
       (function initTheme(){
         const saved = localStorage.getItem('theme');
-        if (saved) setTheme(saved);
-        else setTheme('light'); // default chiaro
+        applyTheme(saved || 'light');
       })();
 
       /******** API HELPERS ********/
@@ -82,11 +81,12 @@
         if (!res.ok) throw new Error('API state error');
         return res.json(); // { companies:[{id,name}], users:[...] }
       }
+      // IMPORTANTISSIMO: text/plain per evitare preflight CORS
       async function apiAction(body) {
         body.token = API_TOKEN;
         const res = await fetch(API_URL, {
           method: "POST",
-          headers: { "Content-Type":"application/json" },
+          headers: { "Content-Type":"text/plain;charset=utf-8" },
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error('API action error');
@@ -107,7 +107,7 @@
         function switchCompany(co){ setState(s=> ({ ...s, company: co })); }
         function toggleTheme(){
           const next = theme === 'dark' ? 'light' : 'dark';
-          setTheme(next);
+          applyTheme(next);
           setThemeState(next);
         }
 
@@ -167,39 +167,31 @@
           return arr;
         }, [users, query, sortKey, sortDir]);
 
+        // Helpers per ricaricare stato dopo un'azione
+        async function refreshState() {
+          const data = await apiGetState();
+          const companies = {};
+          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
+          data.users.forEach(u => companies[u.company_id].users.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso }));
+          setState(s => ({ ...s, companies }));
+        }
+
         // Azioni (tutte lato API)
         async function addUserLocal(user) {
           await apiAction({ action:'create', company_id: company, name:user.name, plan:user.plan, renewal_iso:user.renewalISO });
-          // Aggiorna subito lo stato con un refresh
-          const data = await apiGetState();
-          const companies = {};
-          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-          data.users.forEach(u => companies[u.company_id].users.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso }));
-          setState(s => ({ ...s, companies }));
+          await refreshState();
         }
         async function updateUserLocal(user) {
           await apiAction({ action:'update', id:user.id, company_id: company, name:user.name, plan:user.plan, renewal_iso:user.renewalISO });
-          const data = await apiGetState();
-          const companies = {};
-          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-          data.users.forEach(u => companies[u.company_id].users.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso }));
-          setState(s => ({ ...s, companies }));
+          await refreshState();
         }
         async function removeUserLocal(id) {
           await apiAction({ action:'delete', id });
-          const data = await apiGetState();
-          const companies = {};
-          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-          data.users.forEach(u => companies[u.company_id].users.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso }));
-          setState(s => ({ ...s, companies }));
+          await refreshState();
         }
         async function markPaidLocal(u) {
           await apiAction({ action:'mark_paid', id:u.id });
-          const data = await apiGetState();
-          const companies = {};
-          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-          data.users.forEach(u => companies[u.company_id].users.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso }));
-          setState(s => ({ ...s, companies }));
+          await refreshState();
         }
 
         if (!ready) {
@@ -330,12 +322,14 @@
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
                 <label className="grid gap-1">
                   <span className="text-sm">Nome</span>
-                  <input className="px-3 py-2 border rounded-xl bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700" value={name} onChange={(e) => setName(e.target.value)} required />
+                  <input className="px-3 py-2 border rounded-xl bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700"
+                         value={name} onChange={(e) => setName(e.target.value)} required />
                 </label>
 
                 <label className="grid gap-1">
                   <span className="text-sm">Piano</span>
-                  <select className="px-3 py-2 border rounded-xl bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700" value={plan} onChange={(e) => setPlan(e.target.value)}>
+                  <select className="px-3 py-2 border rounded-xl bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700"
+                          value={plan} onChange={(e) => setPlan(e.target.value)}>
                     <option value="2m">2 mesi</option>
                     <option value="6m">6 mesi</option>
                     <option value="1y">1 anno</option>
@@ -349,7 +343,7 @@
                     value={renewal}
                     onChange={(e) => setRenewal(e.target.value)}
                     placeholder="gg/mm/aaaa"
-                    pattern="^([0-2]?\d|3[01])\/(0?\d|1[0-2])\/\d{4}$"
+                    pattern="^([0-2]?\\d|3[01])\\/(0?\\d|1[0-2])\\/\\d{4}$"
                     required
                   />
                 </label>
@@ -370,5 +364,3 @@
     </script>
   </body>
 </html>
-
-
