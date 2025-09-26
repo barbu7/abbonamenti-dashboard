@@ -39,40 +39,16 @@
         dt.setHours(0, 0, 0, 0);
         return dt;
       }
-      function isoFromLocalDateStr(str) {
-        const dt = parseLocalDateStr(str);
-        return dt ? dt.toISOString() : null;
-      }
+      function isoFromLocalDateStr(str) { const dt = parseLocalDateStr(str); return dt ? dt.toISOString() : null; }
       function localDateStrFromISO(iso) { try { return formatLocalDate(new Date(iso)); } catch { return ""; } }
       function startOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
-      function addMonths(date, months) {
-        const d = new Date(date); const day = d.getDate();
-        d.setMonth(d.getMonth() + months);
-        if (d.getDate() !== day) d.setDate(0);
-        d.setHours(0,0,0,0); return d;
-      }
-      function addPlan(dateISO, plan) {
-        const base = new Date(dateISO);
-        const now = new Date(); now.setHours(0,0,0,0);
-        const start = base >= now ? base : now;
-        let extended;
-        if (plan === "2m") extended = addMonths(start, 2);
-        else if (plan === "6m") extended = addMonths(start, 6);
-        else extended = addMonths(start, 12);
-        return extended.toISOString();
-      }
-      function diffInDays(fromISO, toISO) {
-        const a = new Date(fromISO); const b = new Date(toISO);
-        a.setHours(0,0,0,0); b.setHours(0,0,0,0);
-        return Math.round((b - a) / (1000*60*60*24));
-      }
+      function addMonths(date, months) { const d = new Date(date); const day = d.getDate(); d.setMonth(d.getMonth() + months); if (d.getDate() !== day) d.setDate(0); d.setHours(0,0,0,0); return d; }
+      function addPlan(dateISO, plan) { const base = new Date(dateISO); const now = new Date(); now.setHours(0,0,0,0); const start = base >= now ? base : now; let extended; if (plan === "2m") extended = addMonths(start, 2); else if (plan === "6m") extended = addMonths(start, 6); else extended = addMonths(start, 12); return extended.toISOString(); }
+      function diffInDays(fromISO, toISO) { const a = new Date(fromISO); const b = new Date(toISO); a.setHours(0,0,0,0); b.setHours(0,0,0,0); return Math.round((b - a) / (1000*60*60*24)); }
       function endOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
       function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
       function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
-      async function copyToClipboard(text){
-        try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); }
-        catch { alert("Copia non riuscita"); }
-      }
+      async function copyToClipboard(text){ try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); } catch { alert("Copia non riuscita"); } }
 
       // ---------- API ----------
       async function apiGetState(companyId=null) {
@@ -118,7 +94,7 @@
               id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
               discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
               stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-              note: u.note, status_invoice: u.status_invoice
+              note: u.note, status_invoice: u.status_invoice, business: !!u.business
             });
           });
           return companies;
@@ -200,7 +176,7 @@
               discord_id: user.discord_id||'', user_key: user.user_key||'',
               latest_paid_iso: user.latest_paid_iso||'', stripe_customer_id: user.stripe_customer_id||'',
               country: user.country||'', vat_id: user.vat_id||'', note: user.note||'',
-              status_invoice: user.status_invoice||''
+              status_invoice: user.status_invoice||'', business: !!user.business
             });
             const u = res.user;
             updateCompanyUsers(arr => {
@@ -208,7 +184,7 @@
                 id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
                 discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
                 stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-                note: u.note, status_invoice: u.status_invoice
+                note: u.note, status_invoice: u.status_invoice, business: !!u.business
               });
             });
           } finally { setBusyBtn(null); }
@@ -223,8 +199,8 @@
             };
             const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
             if (manualISO) payload.renewal_iso = manualISO;
-            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status_invoice']
-              .forEach(k => { if (user[k] !== undefined) payload[k] = user[k]; });
+            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status_invoice','business']
+              .forEach(k => { if (user[k] !== undefined) payload[k] = k==='business' ? !!user[k] : user[k]; });
 
             const res = await apiAction(payload);
             const u = res.user || { ...user, renewal_iso: manualISO || user.renewalISO };
@@ -234,7 +210,7 @@
                 id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso || arr[i].renewalISO,
                 discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
                 stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-                note: u.note, status_invoice: u.status_invoice
+                note: u.note, status_invoice: u.status_invoice, business: !!u.business
               };
             });
           } finally { setBusyBtn(null); }
@@ -310,11 +286,12 @@
                       <th className="text-left px-4 py-3">Data rinnovo</th>
                       <th className="text-left px-4 py-3">Giorni rim.</th>
                       <th className="text-left px-4 py-3">Azioni</th>
+                      <th className="text-left px-4 py-3">Business</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-8 text-center text-blue-900/60">Nessun utente</td></tr>
+                      <tr><td colSpan={6} className="px-4 py-8 text-center text-blue-900/60">Nessun utente</td></tr>
                     )}
                     {filtered.map((u) => {
                       const days = diffInDays(endOfTodayISO(), u.renewalISO);
@@ -342,6 +319,9 @@
                                 {busyBtn===rmKey ? 'Rimuovo…' : 'Rimuovi'}
                               </button>
                             </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-block w-3 h-3 rounded-full ${u.business ? 'bg-emerald-500' : 'bg-red-500'}`} title={u.business ? 'Sì' : 'No'}></span>
                           </td>
                         </tr>
                       );
@@ -397,6 +377,7 @@
         const [vat_id, setVat] = useState(defaultValues?.vat_id || "");
         const [note, setNote] = useState(defaultValues?.note || "");
         const [status_invoice, setStatusInvoice] = useState(defaultValues?.status_invoice || "");
+        const [business, setBusiness] = useState(!!defaultValues?.business);
 
         useEffect(()=>{
           if (!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan))));
@@ -417,7 +398,7 @@
             plan,
             renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
-            country, vat_id, note, status_invoice
+            country, vat_id, note, status_invoice, business
           });
         }
 
@@ -465,19 +446,10 @@
                              placeholder="gg/mm/aaaa" />
                     </label>
 
-                    {/* STRIPE - FULL WIDTH with Open+Copy */}
-                    <label className="grid gap-1 sm:col-span-2">
+                    <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                      <div className="flex gap-2">
-                        <input className="flex-1 px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                               value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} placeholder="ID o URL https…" />
-                        {isUrl(stripe_customer_id) && (
-                          <a href={stripe_customer_id} target="_blank" rel="noreferrer"
-                             className="px-3 py-2 rounded-xl bg-blue-600 text-white">Apri</a>
-                        )}
-                        <button type="button" onClick={()=>copyToClipboard(stripe_customer_id)}
-                                className="px-3 py-2 rounded-xl bg-blue-700 text-white">Copia</button>
-                      </div>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} placeholder="ID o URL https…" />
                     </label>
 
                     <label className="grid gap-1">
@@ -492,11 +464,17 @@
                              value={vat_id} onChange={(e)=>setVat(e.target.value)} />
                     </label>
 
-                    {/* STATUS INVOICE - HALF WIDTH */}
-                    <label className="grid gap-1">
+                    <label className="grid gap-2">
                       <span className="text-sm text-blue-900/90">Status invoice</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
                              value={status_invoice} onChange={(e)=>setStatusInvoice(e.target.value)} placeholder="paid / unpaid / refunded …" />
+                    </label>
+
+                    {/* Business flag */}
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" className="w-5 h-5"
+                             checked={business} onChange={(e)=>setBusiness(e.target.checked)} />
+                      <span className="text-blue-900/90">Business</span>
                     </label>
 
                     <label className="grid gap-1 sm:col-span-2">
@@ -525,7 +503,8 @@
         const [form, setForm] = useState({
           ...user,
           renewalLocal: localDateStrFromISO(user.renewalISO || ''),
-          latest_paid_iso_str: user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : ''
+          latest_paid_iso_str: user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : '',
+          business: !!user.business
         });
         function upd(k,v){ setForm(s=>({ ...s, [k]: v })); }
 
@@ -549,7 +528,8 @@
             country: form.country || '',
             vat_id: form.vat_id || '',
             note: form.note || '',
-            status_invoice: form.status_invoice || ''
+            status_invoice: form.status_invoice || '',
+            business: !!form.business
           });
         }
 
@@ -587,7 +567,7 @@
                              onBlur={e=>{ const dt=parseLocalDateStr(e.target.value); if(dt) upd('latest_paid_iso_str', formatLocalDate(dt)); }} />
                     </label>
 
-                    {/* STRIPE - FULL WIDTH with Open+Copy */}
+                    {/* Stripe con Apri/Copia solo qui */}
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
                       <div className="flex gap-2">
@@ -611,10 +591,16 @@
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.vat_id||''} onChange={e=>upd('vat_id', e.target.value)} />
                     </label>
 
-                    {/* STATUS INVOICE - HALF WIDTH */}
-                    <label className="grid gap-1">
+                    <label className="grid gap-2">
                       <span className="text-sm text-blue-900/90">Status invoice</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.status_invoice||''} onChange={e=>upd('status_invoice', e.target.value)} />
+                    </label>
+
+                    {/* Business flag */}
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" className="w-5 h-5"
+                             checked={form.business} onChange={(e)=>upd('business', e.target.checked)} />
+                      <span className="text-blue-900/90">Business</span>
                     </label>
 
                     <label className="grid gap-1 sm:col-span-2">
@@ -639,3 +625,4 @@
     </script>
   </body>
 </html>
+
