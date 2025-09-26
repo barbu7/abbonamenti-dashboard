@@ -101,7 +101,7 @@
         const [showForm, setShowForm] = useState(false);
         const [editUser, setEditUser] = useState(null);
         const [busyBtn, setBusyBtn] = useState(null);
-        const [detailUser, setDetailUser] = useState(null); // per popup dettagli
+        const [detailUser, setDetailUser] = useState(null);
         const pollRef = useRef(null);
 
         function switchCompany(co){ setState(s=> ({ ...s, company: co })); }
@@ -128,23 +128,28 @@
           })().catch(err => { console.error(err); alert("Errore nel caricare i dati dall'API."); });
         }, []);
 
+        // FIX: polling sicuro
         useEffect(() => {
           function startPoll(){
             if (pollRef.current) return;
             pollRef.current = setInterval(async () => {
               try {
                 const data = await apiGetState(state.company);
-                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: mapApiToCompanies(data).companies[state.company] || {name: state.company, users: []} } }));
+                const mapped = mapApiToCompanies(data);
+                const co = mapped[state.company] || { name: state.company==="1" ? "Hidden" : "Sara", users: [] };
+                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: co } }));
               } catch (e) { console.warn("Polling error", e); }
             }, 60000);
           }
           function stopPoll(){ if (pollRef.current){ clearInterval(pollRef.current); pollRef.current = null; } }
-          function onVis(){
+          async function onVis(){
             if (document.visibilityState === 'visible') {
-              apiGetState(state.company).then(d => {
-                const c = mapApiToCompanies(d).companies[state.company];
-                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: c } }));
-              }).catch(()=>{});
+              try {
+                const data = await apiGetState(state.company);
+                const mapped = mapApiToCompanies(data);
+                const co = mapped[state.company] || { name: state.company==="1" ? "Hidden" : "Sara", users: [] };
+                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: co } }));
+              } catch{}
               startPoll();
             } else { stopPoll(); }
           }
@@ -214,8 +219,6 @@
             };
             const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
             if (manualISO) payload.renewal_iso = manualISO;
-
-            // extra fields
             ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status','invoice_url']
               .forEach(k => { if (user[k] !== undefined) payload[k] = user[k]; });
 
@@ -259,10 +262,10 @@
         async function importCsv(file){
           const text = await file.text();
           await apiAction({ action:'import_csv', company_id: company, csv_text: text });
-          // refresh veloce della sola company
           const d = await apiGetState(company);
-          const c = mapApiToCompanies(d).companies[company];
-          setState(s => ({ ...s, companies: { ...s.companies, [company]: c } }));
+          const mapped = mapApiToCompanies(d);
+          const co = mapped[company] || { name: company==="1"?"Hidden":"Sara", users: [] };
+          setState(s => ({ ...s, companies: { ...s.companies, [company]: co } }));
         }
 
         if (!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Caricamento…</div>;
@@ -399,7 +402,6 @@
           isEdit ? localDateStrFromISO(defaultValues.renewalISO)
                  : formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))
         );
-        // campi extra anche in "aggiungi"
         const [discord_id, setDiscordId] = useState(defaultValues?.discord_id || "");
         const [user_key, setUserKey] = useState(defaultValues?.user_key || "");
         const [latest_paid_iso_str, setLatestPaid] = useState(defaultValues?.latest_paid_iso ? localDateStrFromISO(defaultValues.latest_paid_iso) : "");
@@ -528,7 +530,9 @@
 
                   <div className="flex items-center justify-end gap-2 mt-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Annulla</button>
-                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">{saving ? "Salvo…" : "Salva"}</button>
+                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">
+                      {saving ? "Salvo…" : "Salva"}
+                    </button>
                   </div>
                 </fieldset>
               </form>
