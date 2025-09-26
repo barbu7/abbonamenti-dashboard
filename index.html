@@ -4,24 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LOSCOBOT Dashboard abbonamenti</title>
-    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-blue-200">
     <div id="root"></div>
 
-    <!-- React 18 PROD + ReactDOM 18 PROD -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel per JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-      /******** CONFIG FRONTEND ********/
-      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec"; // <-- URL Web App (finisce con /exec)
-      const API_TOKEN = "LoscoBotManagement";        // <-- Script Properties: API_TOKEN
+      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec";
+      const API_TOKEN = "LoscoBotManagement";
 
-      /******** UTILS ********/
       const { useState, useEffect, useMemo, useRef } = React;
 
       function formatLocalDate(d) {
@@ -73,14 +68,14 @@
       function endOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
       function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
 
-      /******** API HELPERS ********/
-      async function apiGetState() {
-        const url = `${API_URL}?token=${encodeURIComponent(API_TOKEN)}`;
-        const res = await fetch(url, { method:'GET' });
+      async function apiGetState(companyId=null) {
+        const params = new URLSearchParams({ token: API_TOKEN });
+        if (companyId) params.set('company_id', companyId);
+        const url = `${API_URL}?${params.toString()}`;
+        const res = await fetch(url);
         if (!res.ok) throw new Error('API state error');
-        return res.json(); // { companies:[{id,name}], users:[...] }
+        return res.json();
       }
-      // text/plain per evitare preflight CORS di Apps Script
       async function apiAction(body) {
         body.token = API_TOKEN;
         const res = await fetch(API_URL, {
@@ -92,8 +87,11 @@
         if (!res.ok) throw new Error('API action error');
         return res.json();
       }
+      function apiExportCsvUrl(companyId){
+        const params = new URLSearchParams({ token: API_TOKEN, action:'export_csv', company_id: companyId });
+        return `${API_URL}?${params.toString()}`;
+      }
 
-      /******** APP ********/
       function App() {
         const [state, setState] = useState({ company:"1", companies:{} });
         const [ready, setReady] = useState(false);
@@ -102,59 +100,58 @@
         const [sortDir, setSortDir] = useState("asc");
         const [showForm, setShowForm] = useState(false);
         const [editUser, setEditUser] = useState(null);
-        const [busyBtn, setBusyBtn] = useState(null); // 'add' | 'edit' | 'remove:<id>' | 'paid:<id>'
+        const [busyBtn, setBusyBtn] = useState(null);
+        const [detailUser, setDetailUser] = useState(null); // per popup dettagli
         const pollRef = useRef(null);
 
         function switchCompany(co){ setState(s=> ({ ...s, company: co })); }
 
-        // helper: API -> state
         function mapApiToCompanies(data){
           const companies = {};
           data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
           data.users.forEach(u => {
             (companies[u.company_id] ??= { name: u.company_id, users: [] }).users.push({
-              id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso
+              id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
+              discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
+              stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
+              note: u.note, status: u.status, invoice_url: u.invoice_url
             });
           });
           return companies;
         }
 
-        // Load iniziale
         useEffect(() => {
           (async () => {
             const data = await apiGetState();
             setState({ company:"1", companies: mapApiToCompanies(data) });
             setReady(true);
-          })().catch(err => {
-            console.error(err);
-            alert("Errore nel caricare i dati dall'API.");
-          });
+          })().catch(err => { console.error(err); alert("Errore nel caricare i dati dall'API."); });
         }, []);
 
-        // Polling ogni 60s SOLO tab visibile
         useEffect(() => {
           function startPoll(){
             if (pollRef.current) return;
             pollRef.current = setInterval(async () => {
               try {
-                const data = await apiGetState();
-                setState(s => ({ ...s, companies: mapApiToCompanies(data) }));
+                const data = await apiGetState(state.company);
+                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: mapApiToCompanies(data).companies[state.company] || {name: state.company, users: []} } }));
               } catch (e) { console.warn("Polling error", e); }
             }, 60000);
           }
           function stopPoll(){ if (pollRef.current){ clearInterval(pollRef.current); pollRef.current = null; } }
           function onVis(){
             if (document.visibilityState === 'visible') {
-              apiGetState().then(d => setState(s => ({ ...s, companies: mapApiToCompanies(d) }))).catch(()=>{});
+              apiGetState(state.company).then(d => {
+                const c = mapApiToCompanies(d).companies[state.company];
+                setState(s => ({ ...s, companies: { ...s.companies, [state.company]: c } }));
+              }).catch(()=>{});
               startPoll();
-            } else {
-              stopPoll();
-            }
+            } else { stopPoll(); }
           }
           document.addEventListener('visibilitychange', onVis);
           if (document.visibilityState === 'visible') startPoll();
           return () => { document.removeEventListener('visibilitychange', onVis); stopPoll(); };
-        }, []);
+        }, [state.company]);
 
         const company = state.company;
         const current = state.companies[company] || { name: company==="1"?"Hidden":"Sara", users: [] };
@@ -173,7 +170,6 @@
           return arr;
         }, [users, query, sortKey, sortDir]);
 
-        // Aggiorna un'azienda nello stato locale in modo immutabile
         function updateCompanyUsers(updater) {
           setState(s => {
             const companies = { ...s.companies };
@@ -185,52 +181,58 @@
           });
         }
 
-        // ➕ Aggiungi (ottimistico)
         async function addUserLocal(user) {
           try {
             setBusyBtn('add');
             const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
             const renewalISO = manualISO || addPlan(startOfTodayISO(), user.plan);
-            const res = await apiAction({
-              action: 'create',
-              company_id: state.company,
-              name: user.name,
-              plan: user.plan,
-              renewal_iso: renewalISO
+            const res = await apiAction({ action: 'create', company_id: company,
+              name: user.name, plan: user.plan, renewal_iso: renewalISO,
+              discord_id: user.discord_id||'', user_key: user.user_key||'',
+              latest_paid_iso: user.latest_paid_iso||'', stripe_customer_id: user.stripe_customer_id||'',
+              country: user.country||'', vat_id: user.vat_id||'', note: user.note||'',
+              status: user.status||'', invoice_url: user.invoice_url||''
             });
             const u = res.user;
-            updateCompanyUsers(arr => { arr.push({ id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso }); });
-          } finally {
-            setBusyBtn(null);
-          }
+            updateCompanyUsers(arr => {
+              arr.push({
+                id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
+                discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
+                stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
+                note: u.note, status: u.status, invoice_url: u.invoice_url
+              });
+            });
+          } finally { setBusyBtn(null); }
         }
 
-        // ✏️ Modifica (ottimistico)
         async function updateUserLocal(user) {
           try {
             setBusyBtn('edit');
             const payload = {
-              action: 'update',
-              id: user.id,
-              company_id: state.company,
-              name: user.name,
-              plan: user.plan
+              action: 'update', id: user.id, company_id: company,
+              name: user.name, plan: user.plan
             };
             const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
             if (manualISO) payload.renewal_iso = manualISO;
 
+            // extra fields
+            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status','invoice_url']
+              .forEach(k => { if (user[k] !== undefined) payload[k] = user[k]; });
+
             const res = await apiAction(payload);
-            const u = res.user || { id: user.id, name: user.name, plan: user.plan, renewal_iso: manualISO || user.renewalISO };
+            const u = res.user || { ...user, renewal_iso: manualISO || user.renewalISO };
             updateCompanyUsers(arr => {
               const i = arr.findIndex(x => x.id === u.id);
-              if (i >= 0) arr[i] = { id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso || arr[i].renewalISO };
+              if (i >= 0) arr[i] = {
+                id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso || arr[i].renewalISO,
+                discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
+                stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
+                note: u.note, status: u.status, invoice_url: u.invoice_url
+              };
             });
-          } finally {
-            setBusyBtn(null);
-          }
+          } finally { setBusyBtn(null); }
         }
 
-        // 🗑️ Rimuovi (ottimistico)
         async function removeUserLocal(id) {
           try {
             setBusyBtn('remove:'+id);
@@ -239,33 +241,31 @@
               const i = arr.findIndex(x => x.id === id);
               if (i >= 0) arr.splice(i, 1);
             });
-          } finally {
-            setBusyBtn(null);
-          }
+          } finally { setBusyBtn(null); }
         }
 
-        // ✅ Segna pagato (ottimistico)
         async function markPaidLocal(u) {
           try {
             setBusyBtn('paid:'+u.id);
             const res = await apiAction({ action: 'mark_paid', id: u.id });
-            const nu = res.user; // {id, renewal_iso}
+            const nu = res.user;
             updateCompanyUsers(arr => {
               const i = arr.findIndex(x => x.id === u.id);
               if (i >= 0) arr[i] = { ...arr[i], renewalISO: nu.renewal_iso };
             });
-          } finally {
-            setBusyBtn(null);
-          }
+          } finally { setBusyBtn(null); }
         }
 
-        if (!ready) {
-          return (
-            <div className="min-h-screen flex items-center justify-center text-blue-900/70">
-              Caricamento…
-            </div>
-          );
+        async function importCsv(file){
+          const text = await file.text();
+          await apiAction({ action:'import_csv', company_id: company, csv_text: text });
+          // refresh veloce della sola company
+          const d = await apiGetState(company);
+          const c = mapApiToCompanies(d).companies[company];
+          setState(s => ({ ...s, companies: { ...s.companies, [company]: c } }));
         }
+
+        if (!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Caricamento…</div>;
 
         return (
           <div className="min-h-screen">
@@ -277,6 +277,15 @@
                 <div className="flex items-center gap-2">
                   <button className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`} onClick={() => switchCompany("1")}>Hidden</button>
                   <button className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`} onClick={() => switchCompany("2")}>Sara</button>
+
+                  <a className="px-3 py-1 rounded-full border border-white/30 bg-blue-500/20"
+                     href={apiExportCsvUrl(company)} download={`users_${company}.csv`}>
+                    ⬇️ Export CSV
+                  </a>
+                  <label className="px-3 py-1 rounded-full border border-white/30 bg-blue-500/20 cursor-pointer">
+                    ⬆️ Import CSV
+                    <input type="file" accept=".csv" className="hidden" onChange={(e)=> e.target.files?.[0] && importCsv(e.target.files[0])} />
+                  </label>
                 </div>
               </div>
             </header>
@@ -297,7 +306,7 @@
                     <option value="asc">Asc</option>
                     <option value="desc">Desc</option>
                   </select>
-                  <button onClick={() => setShowForm(true)} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
+                  <button onClick={() => { setEditUser(null); setShowForm(true); }} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
                     {busyBtn==='add' ? 'Aggiungo…' : '➕ Aggiungi utente'}
                   </button>
                 </div>
@@ -326,7 +335,8 @@
                       const paidKey = 'paid:'+u.id;
                       return (
                         <tr key={u.id} className="border-t border-blue-200 bg-white">
-                          <td className="px-4 py-3 font-medium text-blue-900">{u.name}</td>
+                          <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer"
+                              onClick={()=> setDetailUser(u)}>{u.name}</td>
                           <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>
                           <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>
                           <td className={`px-4 py-3 font-semibold ${color}`}>{days}</td>
@@ -361,7 +371,19 @@
                   else await addUserLocal(payload);
                   setShowForm(false); setEditUser(null);
                 }}
-                saving={busyBtn==='add' || busyBtn==='edit'}   /* <-- passa lo stato di salvataggio */
+                saving={busyBtn==='add' || busyBtn==='edit'}
+              />
+            )}
+
+            {detailUser && (
+              <DetailModal
+                user={detailUser}
+                onClose={()=> setDetailUser(null)}
+                onSave={async (payload)=>{
+                  await updateUserLocal({ ...detailUser, ...payload });
+                  setDetailUser(null);
+                }}
+                saving={busyBtn==='edit'}
               />
             )}
           </div>
@@ -377,69 +399,136 @@
           isEdit ? localDateStrFromISO(defaultValues.renewalISO)
                  : formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))
         );
+        // campi extra anche in "aggiungi"
+        const [discord_id, setDiscordId] = useState(defaultValues?.discord_id || "");
+        const [user_key, setUserKey] = useState(defaultValues?.user_key || "");
+        const [latest_paid_iso_str, setLatestPaid] = useState(defaultValues?.latest_paid_iso ? localDateStrFromISO(defaultValues.latest_paid_iso) : "");
+        const [stripe_customer_id, setStripeId] = useState(defaultValues?.stripe_customer_id || "");
+        const [country, setCountry] = useState(defaultValues?.country || "");
+        const [vat_id, setVat] = useState(defaultValues?.vat_id || "");
+        const [note, setNote] = useState(defaultValues?.note || "");
+        const [status, setStatus] = useState(defaultValues?.status || "");
+        const [invoice_url, setInvoiceUrl] = useState(defaultValues?.invoice_url || "");
 
         useEffect(()=>{
-          if (!isEdit) {
-            setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan))));
-          }
+          if (!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan))));
         }, [plan, isEdit]);
 
         function handleSubmit(e) {
           e.preventDefault();
           const dt = parseLocalDateStr(renewalLocal);
-          if (!dt) {
-            alert("Inserisci la data come gg/mm/aaaa (es. 26/09/2025).");
-            return;
+          if (!dt) return alert("Inserisci la data come gg/mm/aaaa");
+          let latestISO = '';
+          if (latest_paid_iso_str) {
+            const d2 = parseLocalDateStr(latest_paid_iso_str);
+            if (!d2) return alert("Latest paid: usa gg/mm/aaaa");
+            latestISO = d2.toISOString();
           }
-          onSave({ name: name.trim() || "Senza nome", plan, renewalLocal });
+          onSave({
+            name: name.trim() || "Senza nome",
+            plan,
+            renewalLocal,
+            discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
+            country, vat_id, note, status, invoice_url
+          });
         }
 
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
-            <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-blue-200">
+            <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-blue-200">
               <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-blue-900">{isEdit ? "Modifica utente" : "Aggiungi utente"}</h2>
                 <button className="text-blue-700" onClick={onClose} disabled={!!saving}>✕</button>
               </div>
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
                 <fieldset disabled={!!saving} className={saving ? "opacity-60" : ""}>
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Nome</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                           value={name} onChange={(e) => setName(e.target.value)} required />
-                  </label>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Nome</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={name} onChange={(e) => setName(e.target.value)} required />
+                    </label>
 
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Piano</span>
-                    <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                            value={plan} onChange={(e) => setPlan(e.target.value)}>
-                      <option value="2m">2 mesi</option>
-                      <option value="6m">6 mesi</option>
-                      <option value="1y">1 anno</option>
-                    </select>
-                  </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Piano</span>
+                      <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                              value={plan} onChange={(e) => setPlan(e.target.value)}>
+                        <option value="2m">2 mesi</option>
+                        <option value="6m">6 mesi</option>
+                        <option value="1y">1 anno</option>
+                      </select>
+                    </label>
 
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Data rinnovo (gg/mm/aaaa)</span>
-                    <input
-                      className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                      value={renewalLocal}
-                      onChange={(e) => setRenewalLocal(e.target.value)}
-                      onBlur={(e) => {
-                        const dt = parseLocalDateStr(e.target.value);
-                        if (dt) setRenewalLocal(formatLocalDate(dt)); // normalizza
-                      }}
-                      placeholder="gg/mm/aaaa"
-                      required
-                    />
-                    <p className="text-xs text-blue-900/60">Precompilata in base al piano, ma modificabile.</p>
-                  </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Data rinnovo (gg/mm/aaaa)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={renewalLocal}
+                             onChange={(e) => setRenewalLocal(e.target.value)}
+                             onBlur={(e) => { const dt = parseLocalDateStr(e.target.value); if (dt) setRenewalLocal(formatLocalDate(dt)); }}
+                             placeholder="gg/mm/aaaa" required />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Latest paid (gg/mm/aaaa)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={latest_paid_iso_str}
+                             onChange={(e) => setLatestPaid(e.target.value)}
+                             onBlur={(e) => { const dt = parseLocalDateStr(e.target.value); if (dt) setLatestPaid(formatLocalDate(dt)); }}
+                             placeholder="gg/mm/aaaa" />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Discord ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={discord_id} onChange={(e)=>setDiscordId(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">User Key</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={user_key} onChange={(e)=>setUserKey(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Country</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={country} onChange={(e)=>setCountry(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">VAT ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={vat_id} onChange={(e)=>setVat(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Invoice URL</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={invoice_url} onChange={(e)=>setInvoiceUrl(e.target.value)} placeholder="https://..." />
+                    </label>
+
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Status</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={status} onChange={(e)=>setStatus(e.target.value)} placeholder="active / paused / cancelled…" />
+                    </label>
+
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Note</span>
+                      <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3"
+                                value={note} onChange={(e)=>setNote(e.target.value)} />
+                    </label>
+                  </div>
 
                   <div className="flex items-center justify-end gap-2 mt-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Annulla</button>
-                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">
-                      {saving ? "Salvo…" : "Salva"}
-                    </button>
+                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">{saving ? "Salvo…" : "Salva"}</button>
                   </div>
                 </fieldset>
               </form>
@@ -448,10 +537,121 @@
         );
       }
 
-      // MOUNT
+      function DetailModal({ user, onClose, onSave, saving }) {
+        const { useState } = React;
+        const [form, setForm] = useState({
+          ...user,
+          renewalLocal: localDateStrFromISO(user.renewalISO || ''),
+          latest_paid_iso_str: user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : ''
+        });
+        function upd(k,v){ setForm(s=>({ ...s, [k]: v })); }
+        function submit(e){
+          e.preventDefault();
+          const d1 = parseLocalDateStr(form.renewalLocal);
+          if (!d1) return alert("Renewal: formato gg/mm/aaaa");
+          if (form.latest_paid_iso_str){
+            const d2 = parseLocalDateStr(form.latest_paid_iso_str);
+            if (!d2) return alert("Latest paid: formato gg/mm/aaaa");
+          }
+          onSave({
+            id: user.id,
+            name: form.name,
+            plan: form.plan,
+            renewalLocal: form.renewalLocal,
+            discord_id: form.discord_id || '',
+            user_key: form.user_key || '',
+            latest_paid_iso: form.latest_paid_iso_str ? parseLocalDateStr(form.latest_paid_iso_str).toISOString() : '',
+            stripe_customer_id: form.stripe_customer_id || '',
+            country: form.country || '',
+            vat_id: form.vat_id || '',
+            note: form.note || '',
+            status: form.status || '',
+            invoice_url: form.invoice_url || ''
+          });
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+            <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl border border-blue-200">
+              <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-blue-900">Dettagli utente</h2>
+                <button className="text-blue-700" onClick={onClose} disabled={!!saving}>✕</button>
+              </div>
+              <form onSubmit={submit} className="px-6 py-5 grid gap-4">
+                <fieldset disabled={!!saving} className={saving ? "opacity-60" : ""}>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Nome</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.name} onChange={e=>upd('name', e.target.value)} />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Piano</span>
+                      <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.plan} onChange={e=>upd('plan', e.target.value)}>
+                        <option value="2m">2 mesi</option><option value="6m">6 mesi</option><option value="1y">1 anno</option>
+                      </select>
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Next renewal (gg/mm/aaaa)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.renewalLocal}
+                             onChange={e=>upd('renewalLocal', e.target.value)}
+                             onBlur={e=>{ const dt=parseLocalDateStr(e.target.value); if(dt) upd('renewalLocal', formatLocalDate(dt)); }} />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Latest paid (gg/mm/aaaa)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.latest_paid_iso_str}
+                             onChange={e=>upd('latest_paid_iso_str', e.target.value)}
+                             onBlur={e=>{ const dt=parseLocalDateStr(e.target.value); if(dt) upd('latest_paid_iso_str', formatLocalDate(dt)); }} />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Discord ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.discord_id||''} onChange={e=>upd('discord_id', e.target.value)} />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">User Key</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.user_key||''} onChange={e=>upd('user_key', e.target.value)} />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.stripe_customer_id||''} onChange={e=>upd('stripe_customer_id', e.target.value)} />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Country</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.country||''} onChange={e=>upd('country', e.target.value)} />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">VAT ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.vat_id||''} onChange={e=>upd('vat_id', e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Invoice URL</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.invoice_url||''} onChange={e=>upd('invoice_url', e.target.value)} placeholder="https://..." />
+                    </label>
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Status</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.status||''} onChange={e=>upd('status', e.target.value)} />
+                    </label>
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Note</span>
+                      <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={form.note||''} onChange={e=>upd('note', e.target.value)} />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 mt-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Chiudi</button>
+                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">{saving ? "Salvo…" : "Salva"}</button>
+                  </div>
+                </fieldset>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
       const root = ReactDOM.createRoot(document.getElementById("root"));
       root.render(<App />);
     </script>
   </body>
 </html>
-
