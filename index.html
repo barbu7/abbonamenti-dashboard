@@ -59,12 +59,9 @@
       // ---------- DatePicker (Flatpickr) ----------
       function DatePicker({ value, onChange, required=false }) {
         const inputRef = useRef(null);
-
-        // init una sola volta
         useEffect(() => {
           if (!inputRef.current) return;
           const fp = flatpickr(inputRef.current, {
-            // Mostra e salva nel formato gg/mm/aaaa (compatibile con parseLocalDateStr)
             dateFormat: "d/m/Y",
             defaultDate: value || null,
             allowInput: true,
@@ -72,14 +69,11 @@
           });
           return () => { try { fp.destroy(); } catch {} };
         }, []);
-
-        // sync quando value cambia dall'esterno
         useEffect(() => {
           if (inputRef.current && inputRef.current._flatpickr) {
             inputRef.current._flatpickr.setDate(value || null, false, "d/m/Y");
           }
         }, [value]);
-
         return (
           <input
             ref={inputRef}
@@ -284,41 +278,41 @@
         if (!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Caricamento…</div>;
 
         return (
-          <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
-            <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
-              {/* LOGO + TITOLO (logo per primo) */}
-              <a href="./" className="flex items-center gap-3">
-                <img
-                  src="Losco_Bot.png"
-                  alt="LOSCOBOT"
-                  className="h-9 w-9 rounded-md shadow-sm select-none"
-                  draggable="false"
-                  width="36"
-                  height="36"
-                />
-                <span className="text-2xl font-bold drop-shadow">
-                  LOSCOBOT Dashboard abbonamenti
-                </span>
-              </a>
-          
-              {/* SWITCH COMPANY */}
-              <div className="flex items-center gap-2">
-                <button
-                  className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
-                  onClick={() => switchCompany("1")}
-                >
-                  Hidden
-                </button>
-                <button
-                  className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
-                  onClick={() => switchCompany("2")}
-                >
-                  Sara
-                </button>
-              </div>
-            </div>
-          </header>
+          <div className="min-h-screen">
+            <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
+              <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
+                {/* LOGO + TITOLO */}
+                <a href="./" className="flex items-center gap-3">
+                  <img
+                    src="Losco_Bot.png"
+                    alt="LOSCOBOT"
+                    className="h-9 w-9 rounded-md shadow-sm select-none"
+                    draggable="false"
+                    width="36"
+                    height="36"
+                  />
+                  <span className="text-2xl font-bold drop-shadow">
+                    LOSCOBOT Dashboard abbonamenti
+                  </span>
+                </a>
 
+                {/* SWITCH COMPANY */}
+                <div className="flex items-center gap-2">
+                  <button
+                    className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                    onClick={() => switchCompany("1")}
+                  >
+                    Hidden
+                  </button>
+                  <button
+                    className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                    onClick={() => switchCompany("2")}
+                  >
+                    Sara
+                  </button>
+                </div>
+              </div>
+            </header>
 
             <main className="mx-auto max-w-6xl px-4 py-6">
               <section className="mb-6 grid gap-3 md:grid-cols-3">
@@ -633,5 +627,3 @@
     </script>
   </body>
 </html>
-
-
