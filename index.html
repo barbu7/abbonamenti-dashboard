@@ -6,8 +6,6 @@
     <title>LOSCOBOT Dashboard abbonamenti</title>
     <link rel="icon" href="Losco_Bot.png">
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Flatpickr (calendar) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   </head>
   <body class="bg-blue-200">
     <div id="root"></div>
@@ -15,9 +13,6 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Flatpickr JS + locale IT -->
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
 
     <script type="text/babel">
       const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec";
@@ -55,36 +50,6 @@
       function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
       function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
       async function copyToClipboard(text){ try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); } catch { alert("Copia non riuscita"); } }
-
-      // ---------- DatePicker (Flatpickr) ----------
-      function DatePicker({ value, onChange, required=false }) {
-        const inputRef = useRef(null);
-        useEffect(() => {
-          if (!inputRef.current) return;
-          const fp = flatpickr(inputRef.current, {
-            dateFormat: "d/m/Y",
-            defaultDate: value || null,
-            allowInput: true,
-            locale: flatpickr.l10ns.it,
-          });
-          return () => { try { fp.destroy(); } catch {} };
-        }, []);
-        useEffect(() => {
-          if (inputRef.current && inputRef.current._flatpickr) {
-            inputRef.current._flatpickr.setDate(value || null, false, "d/m/Y");
-          }
-        }, [value]);
-        return (
-          <input
-            ref={inputRef}
-            className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-            value={value || ""}
-            onChange={(e)=> onChange(e.target.value)}
-            required={required}
-            placeholder="gg/mm/aaaa"
-          />
-        );
-      }
 
       // ---------- API ----------
       async function apiGetState(companyId=null) {
@@ -440,7 +405,7 @@
         function handleSubmit(e) {
           e.preventDefault();
           const dt = parseLocalDateStr(renewalLocal);
-          if (!dt) return alert("Inserisci la data come gg/mm/aaaa");
+          if (!dt) return alert("Inserisci la data rinnovo come gg/mm/aaaa");
           let latestISO = '';
           if (latest_paid_iso_str) {
             const d2 = parseLocalDateStr(latest_paid_iso_str);
@@ -455,6 +420,8 @@
             country, vat_id, note, status_invoice, business
           });
         }
+
+        const datePattern = "(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
 
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
@@ -483,13 +450,38 @@
                     </label>
 
                     <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Discord ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={discord_id} onChange={(e)=>setDiscordId(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">User Key</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                             value={user_key} onChange={(e)=>setUserKey(e.target.value)} />
+                    </label>
+
+                    <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Data rinnovo</span>
-                      <DatePicker value={renewalLocal} onChange={setRenewalLocal} required />
+                      <input
+                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                        value={renewalLocal}
+                        onChange={(e)=>setRenewalLocal(e.target.value)}
+                        placeholder="gg/mm/aaaa"
+                        pattern={datePattern}
+                        required
+                      />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Latest paid</span>
-                      <DatePicker value={latest_paid_iso_str} onChange={setLatestPaid} />
+                      <input
+                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                        value={latest_paid_iso_str}
+                        onChange={(e)=>setLatestPaid(e.target.value)}
+                        placeholder="gg/mm/aaaa"
+                        pattern={datePattern}
+                      />
                     </label>
 
                     <label className="grid gap-1">
@@ -627,3 +619,4 @@
     </script>
   </body>
 </html>
+
