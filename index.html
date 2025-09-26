@@ -10,10 +10,10 @@
   <body class="bg-blue-200">
     <div id="root"></div>
 
-    <!-- React 18 PROD + ReactDOM 18 PROD (più veloci) -->
+    <!-- React 18 PROD + ReactDOM 18 PROD -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel (serve per JSX, ma teniamo il resto più snello) -->
+    <!-- Babel per JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
@@ -87,7 +87,6 @@
           method: "POST",
           headers: { "Content-Type":"text/plain;charset=utf-8" },
           body: JSON.stringify(body),
-          // keepalive riduce i fallimenti se chiudi la tab durante la richiesta
           keepalive: true,
         });
         if (!res.ok) throw new Error('API action error');
@@ -108,7 +107,7 @@
 
         function switchCompany(co){ setState(s=> ({ ...s, company: co })); }
 
-        // helper per convertire risposta API -> state.companies
+        // helper: API -> state
         function mapApiToCompanies(data){
           const companies = {};
           data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
@@ -132,7 +131,7 @@
           });
         }, []);
 
-        // Polling ogni 60s SOLO quando la tab è visibile
+        // Polling ogni 60s SOLO tab visibile
         useEffect(() => {
           function startPoll(){
             if (pollRef.current) return;
@@ -143,12 +142,9 @@
               } catch (e) { console.warn("Polling error", e); }
             }, 60000);
           }
-          function stopPoll(){
-            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-          }
+          function stopPoll(){ if (pollRef.current){ clearInterval(pollRef.current); pollRef.current = null; } }
           function onVis(){
             if (document.visibilityState === 'visible') {
-              // refresh immediato al rientro
               apiGetState().then(d => setState(s => ({ ...s, companies: mapApiToCompanies(d) }))).catch(()=>{});
               startPoll();
             } else {
@@ -302,7 +298,7 @@
                     <option value="desc">Desc</option>
                   </select>
                   <button onClick={() => setShowForm(true)} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
-                    {busyBtn==='add' ? 'Salvataggio…' : '➕ Aggiungi utente'}
+                    {busyBtn==='add' ? 'Aggiungo…' : '➕ Aggiungi utente'}
                   </button>
                 </div>
               </section>
@@ -365,14 +361,14 @@
                   else await addUserLocal(payload);
                   setShowForm(false); setEditUser(null);
                 }}
-                saving={busyBtn==='add' || busyBtn==='edit'}
+                saving={busyBtn==='add' || busyBtn==='edit'}   /* <-- passa lo stato di salvataggio */
               />
             )}
           </div>
         );
       }
 
-      function UserForm({ onClose, onSave, defaultValues }) {
+      function UserForm({ onClose, onSave, defaultValues, saving }) {
         const { useState, useEffect } = React;
         const isEdit = !!defaultValues;
         const [name, setName] = useState(defaultValues?.name || "");
@@ -403,47 +399,49 @@
             <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-blue-200">
               <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-blue-900">{isEdit ? "Modifica utente" : "Aggiungi utente"}</h2>
-                <button className="text-blue-700" onClick={onClose}>✕</button>
+                <button className="text-blue-700" onClick={onClose} disabled={!!saving}>✕</button>
               </div>
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
-                <label className="grid gap-1">
-                  <span className="text-sm text-blue-900/90">Nome</span>
-                  <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                         value={name} onChange={(e) => setName(e.target.value)} required />
-                </label>
+                <fieldset disabled={!!saving} className={saving ? "opacity-60" : ""}>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Nome</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                           value={name} onChange={(e) => setName(e.target.value)} required />
+                  </label>
 
-                <label className="grid gap-1">
-                  <span className="text-sm text-blue-900/90">Piano</span>
-                  <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                          value={plan} onChange={(e) => setPlan(e.target.value)}>
-                    <option value="2m">2 mesi</option>
-                    <option value="6m">6 mesi</option>
-                    <option value="1y">1 anno</option>
-                  </select>
-                </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Piano</span>
+                    <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                            value={plan} onChange={(e) => setPlan(e.target.value)}>
+                      <option value="2m">2 mesi</option>
+                      <option value="6m">6 mesi</option>
+                      <option value="1y">1 anno</option>
+                    </select>
+                  </label>
 
-                <label className="grid gap-1">
-                  <span className="text-sm text-blue-900/90">Data rinnovo (gg/mm/aaaa)</span>
-                  <input
-                    className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                    value={renewalLocal}
-                    onChange={(e) => setRenewalLocal(e.target.value)}
-                    onBlur={(e) => {
-                      const dt = parseLocalDateStr(e.target.value);
-                      if (dt) setRenewalLocal(formatLocalDate(dt)); // normalizza
-                    }}
-                    placeholder="gg/mm/aaaa"
-                    required
-                  />
-                  <p className="text-xs text-blue-900/60">Precompilata in base al piano, ma modificabile.</p>
-                </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Data rinnovo (gg/mm/aaaa)</span>
+                    <input
+                      className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                      value={renewalLocal}
+                      onChange={(e) => setRenewalLocal(e.target.value)}
+                      onBlur={(e) => {
+                        const dt = parseLocalDateStr(e.target.value);
+                        if (dt) setRenewalLocal(formatLocalDate(dt)); // normalizza
+                      }}
+                      placeholder="gg/mm/aaaa"
+                      required
+                    />
+                    <p className="text-xs text-blue-900/60">Precompilata in base al piano, ma modificabile.</p>
+                  </label>
 
-                <div className="flex items-center justify-end gap-2 mt-2">
-                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Annulla</button>
-                  <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">
-                    Salva
-                  </button>
-                </div>
+                  <div className="flex items-center justify-end gap-2 mt-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Annulla</button>
+                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">
+                      {saving ? "Salvo…" : "Salva"}
+                    </button>
+                  </div>
+                </fieldset>
               </form>
             </div>
           </div>
@@ -456,3 +454,4 @@
     </script>
   </body>
 </html>
+
