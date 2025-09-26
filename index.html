@@ -32,13 +32,16 @@
         return `${dd}/${mm}/${yyyy}`;
       }
       function parseLocalDateStr(str) {
-        // atteso gg/mm/aaaa
-        const m = String(str || "").match(/^([0-2]?\d|3[01])\/(0?\d|1[0-2])\/(\d{4})$/);
+        // Accetta "gg/mm/aaaa", "g/m/aaaa", con / oppure - oppure spazi o punto
+        const s = String(str || "").trim();
+        const m = s.match(/^(\d{1,2})[\/\-\.\s](\d{1,2})[\/\-\.\s](\d{4})$/);
         if (!m) return null;
         const dd = parseInt(m[1], 10);
         const mm = parseInt(m[2], 10);
         const yyyy = parseInt(m[3], 10);
         const dt = new Date(yyyy, mm - 1, dd);
+        // Ricontrollo (esclude 31/02 ecc.)
+        if (dt.getFullYear() !== yyyy || dt.getMonth() !== (mm - 1) || dt.getDate() !== dd) return null;
         dt.setHours(0, 0, 0, 0);
         return dt;
       }
@@ -353,8 +356,11 @@
                     className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
                     value={renewalLocal}
                     onChange={(e) => setRenewalLocal(e.target.value)}
+                    onBlur={(e) => {
+                      const dt = parseLocalDateStr(e.target.value);
+                      if (dt) setRenewalLocal(formatLocalDate(dt)); // normalizza a gg/mm/aaaa
+                    }}
                     placeholder="gg/mm/aaaa"
-                    pattern="^([0-2]?\\d|3[01])\\/(0?\\d|1[0-2])\\/\\d{4}$"
                     required
                   />
                   <p className="text-xs text-blue-900/60">Precompilata in base al piano, ma modificabile.</p>
