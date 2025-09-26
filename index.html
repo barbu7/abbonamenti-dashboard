@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="it">
   <head>
@@ -11,18 +10,19 @@
   <body class="bg-blue-200">
     <div id="root"></div>
 
-    <!-- React + ReactDOM + Babel -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- React 18 PROD + ReactDOM 18 PROD (più veloci) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel (serve per JSX, ma teniamo il resto più snello) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
       /******** CONFIG FRONTEND ********/
       const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec"; // <-- URL Web App (finisce con /exec)
-      const API_TOKEN = "LoscoBotManagement";        // <-- lo stesso token messo nelle Script Properties
+      const API_TOKEN = "LoscoBotManagement";        // <-- Script Properties: API_TOKEN
 
       /******** UTILS ********/
-      const { useState, useEffect, useMemo } = React;
+      const { useState, useEffect, useMemo, useRef } = React;
 
       function formatLocalDate(d) {
         const dt = d instanceof Date ? d : new Date(d);
@@ -32,7 +32,6 @@
         return `${dd}/${mm}/${yyyy}`;
       }
       function parseLocalDateStr(str) {
-        // Accetta "gg/mm/aaaa", "g/m/aaaa", con / oppure - oppure spazi o punto
         const s = String(str || "").trim();
         const m = s.match(/^(\d{1,2})[\/\-\.\s](\d{1,2})[\/\-\.\s](\d{4})$/);
         if (!m) return null;
@@ -40,15 +39,13 @@
         const mm = parseInt(m[2], 10);
         const yyyy = parseInt(m[3], 10);
         const dt = new Date(yyyy, mm - 1, dd);
-        // Ricontrollo (esclude 31/02 ecc.)
         if (dt.getFullYear() !== yyyy || dt.getMonth() !== (mm - 1) || dt.getDate() !== dd) return null;
         dt.setHours(0, 0, 0, 0);
         return dt;
       }
       function isoFromLocalDateStr(str) {
         const dt = parseLocalDateStr(str);
-        if (!dt) return null;
-        return dt.toISOString();
+        return dt ? dt.toISOString() : null;
       }
       function localDateStrFromISO(iso) { try { return formatLocalDate(new Date(iso)); } catch { return ""; } }
       function startOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
@@ -90,6 +87,8 @@
           method: "POST",
           headers: { "Content-Type":"text/plain;charset=utf-8" },
           body: JSON.stringify(body),
+          // keepalive riduce i fallimenti se chiudi la tab durante la richiesta
+          keepalive: true,
         });
         if (!res.ok) throw new Error('API action error');
         return res.json();
@@ -104,21 +103,28 @@
         const [sortDir, setSortDir] = useState("asc");
         const [showForm, setShowForm] = useState(false);
         const [editUser, setEditUser] = useState(null);
+        const [busyBtn, setBusyBtn] = useState(null); // 'add' | 'edit' | 'remove:<id>' | 'paid:<id>'
+        const pollRef = useRef(null);
 
         function switchCompany(co){ setState(s=> ({ ...s, company: co })); }
+
+        // helper per convertire risposta API -> state.companies
+        function mapApiToCompanies(data){
+          const companies = {};
+          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
+          data.users.forEach(u => {
+            (companies[u.company_id] ??= { name: u.company_id, users: [] }).users.push({
+              id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso
+            });
+          });
+          return companies;
+        }
 
         // Load iniziale
         useEffect(() => {
           (async () => {
             const data = await apiGetState();
-            const companies = {};
-            data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-            data.users.forEach(u => {
-              companies[u.company_id].users.push({
-                id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso
-              });
-            });
-            setState({ company:"1", companies });
+            setState({ company:"1", companies: mapApiToCompanies(data) });
             setReady(true);
           })().catch(err => {
             console.error(err);
@@ -126,24 +132,32 @@
           });
         }, []);
 
-        // Polling ogni 15s per sincronizzare
+        // Polling ogni 60s SOLO quando la tab è visibile
         useEffect(() => {
-          const id = setInterval(async () => {
-            try {
-              const data = await apiGetState();
-              const companies = {};
-              data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-              data.users.forEach(u => {
-                companies[u.company_id].users.push({
-                  id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso
-                });
-              });
-              setState(s => ({ ...s, companies }));
-            } catch (e) {
-              console.warn("Polling error", e);
+          function startPoll(){
+            if (pollRef.current) return;
+            pollRef.current = setInterval(async () => {
+              try {
+                const data = await apiGetState();
+                setState(s => ({ ...s, companies: mapApiToCompanies(data) }));
+              } catch (e) { console.warn("Polling error", e); }
+            }, 60000);
+          }
+          function stopPoll(){
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+          }
+          function onVis(){
+            if (document.visibilityState === 'visible') {
+              // refresh immediato al rientro
+              apiGetState().then(d => setState(s => ({ ...s, companies: mapApiToCompanies(d) }))).catch(()=>{});
+              startPoll();
+            } else {
+              stopPoll();
             }
-          }, 15000);
-          return () => clearInterval(id);
+          }
+          document.addEventListener('visibilitychange', onVis);
+          if (document.visibilityState === 'visible') startPoll();
+          return () => { document.removeEventListener('visibilitychange', onVis); stopPoll(); };
         }, []);
 
         const company = state.company;
@@ -163,37 +177,90 @@
           return arr;
         }, [users, query, sortKey, sortDir]);
 
-        // Helpers per ricaricare stato dopo un'azione
-        async function refreshState() {
-          const data = await apiGetState();
-          const companies = {};
-          data.companies.forEach(c => companies[c.id] = { name: c.name, users: [] });
-          data.users.forEach(u => companies[u.company_id].users.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso }));
-          setState(s => ({ ...s, companies }));
+        // Aggiorna un'azienda nello stato locale in modo immutabile
+        function updateCompanyUsers(updater) {
+          setState(s => {
+            const companies = { ...s.companies };
+            const coId = s.company;
+            const co = { ...companies[coId], users: [...(companies[coId]?.users || [])] };
+            updater(co.users);
+            companies[coId] = co;
+            return { ...s, companies };
+          });
         }
 
-        // Azioni (tutte lato API)
+        // ➕ Aggiungi (ottimistico)
         async function addUserLocal(user) {
-          // Se hai fornito una data manuale valida, uso quella; altrimenti calcolo oggi + piano
-          const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
-          const renewalISO = manualISO || addPlan(startOfTodayISO(), user.plan);
-          await apiAction({ action:'create', company_id: company, name:user.name, plan:user.plan, renewal_iso: renewalISO });
-          await refreshState();
+          try {
+            setBusyBtn('add');
+            const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
+            const renewalISO = manualISO || addPlan(startOfTodayISO(), user.plan);
+            const res = await apiAction({
+              action: 'create',
+              company_id: state.company,
+              name: user.name,
+              plan: user.plan,
+              renewal_iso: renewalISO
+            });
+            const u = res.user;
+            updateCompanyUsers(arr => { arr.push({ id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso }); });
+          } finally {
+            setBusyBtn(null);
+          }
         }
+
+        // ✏️ Modifica (ottimistico)
         async function updateUserLocal(user) {
-          const payload = { action:'update', id:user.id, company_id: company, name:user.name, plan:user.plan };
-          const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
-          if (manualISO) payload.renewal_iso = manualISO; // se cambi la data, la salvo
-          await apiAction(payload);
-          await refreshState();
+          try {
+            setBusyBtn('edit');
+            const payload = {
+              action: 'update',
+              id: user.id,
+              company_id: state.company,
+              name: user.name,
+              plan: user.plan
+            };
+            const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
+            if (manualISO) payload.renewal_iso = manualISO;
+
+            const res = await apiAction(payload);
+            const u = res.user || { id: user.id, name: user.name, plan: user.plan, renewal_iso: manualISO || user.renewalISO };
+            updateCompanyUsers(arr => {
+              const i = arr.findIndex(x => x.id === u.id);
+              if (i >= 0) arr[i] = { id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso || arr[i].renewalISO };
+            });
+          } finally {
+            setBusyBtn(null);
+          }
         }
+
+        // 🗑️ Rimuovi (ottimistico)
         async function removeUserLocal(id) {
-          await apiAction({ action:'delete', id });
-          await refreshState();
+          try {
+            setBusyBtn('remove:'+id);
+            await apiAction({ action: 'delete', id });
+            updateCompanyUsers(arr => {
+              const i = arr.findIndex(x => x.id === id);
+              if (i >= 0) arr.splice(i, 1);
+            });
+          } finally {
+            setBusyBtn(null);
+          }
         }
+
+        // ✅ Segna pagato (ottimistico)
         async function markPaidLocal(u) {
-          await apiAction({ action:'mark_paid', id:u.id });
-          await refreshState();
+          try {
+            setBusyBtn('paid:'+u.id);
+            const res = await apiAction({ action: 'mark_paid', id: u.id });
+            const nu = res.user; // {id, renewal_iso}
+            updateCompanyUsers(arr => {
+              const i = arr.findIndex(x => x.id === u.id);
+              if (i >= 0) arr[i] = { ...arr[i], renewalISO: nu.renewal_iso };
+            });
+          } finally {
+            setBusyBtn(null);
+          }
         }
 
         if (!ready) {
@@ -234,7 +301,9 @@
                     <option value="asc">Asc</option>
                     <option value="desc">Desc</option>
                   </select>
-                  <button onClick={() => setShowForm(true)} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">➕ Aggiungi utente</button>
+                  <button onClick={() => setShowForm(true)} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
+                    {busyBtn==='add' ? 'Salvataggio…' : '➕ Aggiungi utente'}
+                  </button>
                 </div>
               </section>
 
@@ -254,10 +323,11 @@
                       <tr><td colSpan={5} className="px-4 py-8 text-center text-blue-900/60">Nessun utente</td></tr>
                     )}
                     {filtered.map((u) => {
-                      const todayISO = endOfTodayISO();
-                      const days = diffInDays(todayISO, u.renewalISO);
+                      const days = diffInDays(endOfTodayISO(), u.renewalISO);
                       const renewalStr = localDateStrFromISO(u.renewalISO);
                       const color = days < 0 ? "text-red-600" : days <= 3 ? "text-amber-600" : "text-emerald-700";
+                      const rmKey = 'remove:'+u.id;
+                      const paidKey = 'paid:'+u.id;
                       return (
                         <tr key={u.id} className="border-t border-blue-200 bg-white">
                           <td className="px-4 py-3 font-medium text-blue-900">{u.name}</td>
@@ -266,9 +336,16 @@
                           <td className={`px-4 py-3 font-semibold ${color}`}>{days}</td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-2">
-                              <button onClick={() => markPaidLocal(u)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white">Segna pagato</button>
-                              <button onClick={() => { setEditUser(u); setShowForm(true); }} className="px-3 py-1.5 rounded-lg bg-blue-700 text-white">Modifica</button>
-                              <button onClick={() => removeUserLocal(u.id)} className="px-3 py-1.5 rounded-lg bg-white border border-blue-200">Rimuovi</button>
+                              <button onClick={() => markPaidLocal(u)} disabled={busyBtn===paidKey}
+                                      className={`px-3 py-1.5 rounded-lg text-white ${busyBtn===paidKey?'bg-emerald-400':'bg-emerald-600 hover:opacity-95'}`}>
+                                {busyBtn===paidKey ? 'Aggiorno…' : 'Segna pagato'}
+                              </button>
+                              <button onClick={() => { setEditUser(u); setShowForm(true); }}
+                                      className="px-3 py-1.5 rounded-lg bg-blue-700 text-white">Modifica</button>
+                              <button onClick={() => removeUserLocal(u.id)} disabled={busyBtn===rmKey}
+                                      className={`px-3 py-1.5 rounded-lg bg-white border border-blue-200 ${busyBtn===rmKey?'opacity-50':'hover:bg-blue-50'}`}>
+                                {busyBtn===rmKey ? 'Rimuovo…' : 'Rimuovi'}
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -288,6 +365,7 @@
                   else await addUserLocal(payload);
                   setShowForm(false); setEditUser(null);
                 }}
+                saving={busyBtn==='add' || busyBtn==='edit'}
               />
             )}
           </div>
@@ -300,12 +378,10 @@
         const [name, setName] = useState(defaultValues?.name || "");
         const [plan, setPlan] = useState(defaultValues?.plan || "2m");
         const [renewalLocal, setRenewalLocal] = useState(
-          // stringa "gg/mm/aaaa" editabile
           isEdit ? localDateStrFromISO(defaultValues.renewalISO)
                  : formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))
         );
 
-        // quando cambio piano in "nuovo", aggiorno la proposta automatica
         useEffect(()=>{
           if (!isEdit) {
             setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan))));
@@ -314,16 +390,12 @@
 
         function handleSubmit(e) {
           e.preventDefault();
-          // validazione base
-          if (!parseLocalDateStr(renewalLocal)) {
-            alert("Inserisci la data come gg/mm/aaaa");
+          const dt = parseLocalDateStr(renewalLocal);
+          if (!dt) {
+            alert("Inserisci la data come gg/mm/aaaa (es. 26/09/2025).");
             return;
           }
-          onSave({
-            name: name.trim() || "Senza nome",
-            plan,
-            renewalLocal, // la conversione a ISO avviene nel caller
-          });
+          onSave({ name: name.trim() || "Senza nome", plan, renewalLocal });
         }
 
         return (
@@ -358,7 +430,7 @@
                     onChange={(e) => setRenewalLocal(e.target.value)}
                     onBlur={(e) => {
                       const dt = parseLocalDateStr(e.target.value);
-                      if (dt) setRenewalLocal(formatLocalDate(dt)); // normalizza a gg/mm/aaaa
+                      if (dt) setRenewalLocal(formatLocalDate(dt)); // normalizza
                     }}
                     placeholder="gg/mm/aaaa"
                     required
@@ -368,7 +440,9 @@
 
                 <div className="flex items-center justify-end gap-2 mt-2">
                   <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Annulla</button>
-                  <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">Salva</button>
+                  <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">
+                    Salva
+                  </button>
                 </div>
               </form>
             </div>
