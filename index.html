@@ -19,6 +19,7 @@
 
       const { useState, useEffect, useMemo, useRef } = React;
 
+      // ---------- date & utils ----------
       function formatLocalDate(d) {
         const dt = d instanceof Date ? d : new Date(d);
         const dd = String(dt.getDate()).padStart(2, "0");
@@ -67,7 +68,13 @@
       }
       function endOfTodayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
       function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
+      function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
+      async function copyToClipboard(text){
+        try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); }
+        catch { alert("Copia non riuscita"); }
+      }
 
+      // ---------- API ----------
       async function apiGetState(companyId=null) {
         const params = new URLSearchParams({ token: API_TOKEN });
         if (companyId) params.set('company_id', companyId);
@@ -88,6 +95,7 @@
         return res.json();
       }
 
+      // ---------- App ----------
       function App() {
         const [state, setState] = useState({ company:"1", companies:{} });
         const [ready, setReady] = useState(false);
@@ -371,6 +379,7 @@
         );
       }
 
+      // ---------- Modale Aggiungi/Modifica ----------
       function UserForm({ onClose, onSave, defaultValues, saving }) {
         const { useState, useEffect } = React;
         const isEdit = !!defaultValues;
@@ -456,22 +465,19 @@
                              placeholder="gg/mm/aaaa" />
                     </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Discord ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={discord_id} onChange={(e)=>setDiscordId(e.target.value)} />
-                    </label>
-
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">User Key</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={user_key} onChange={(e)=>setUserKey(e.target.value)} />
-                    </label>
-
-                    <label className="grid gap-1">
+                    {/* STRIPE - FULL WIDTH with Open+Copy */}
+                    <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} placeholder="ID o URL https…" />
+                      <div className="flex gap-2">
+                        <input className="flex-1 px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                               value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} placeholder="ID o URL https…" />
+                        {isUrl(stripe_customer_id) && (
+                          <a href={stripe_customer_id} target="_blank" rel="noreferrer"
+                             className="px-3 py-2 rounded-xl bg-blue-600 text-white">Apri</a>
+                        )}
+                        <button type="button" onClick={()=>copyToClipboard(stripe_customer_id)}
+                                className="px-3 py-2 rounded-xl bg-blue-700 text-white">Copia</button>
+                      </div>
                     </label>
 
                     <label className="grid gap-1">
@@ -486,7 +492,8 @@
                              value={vat_id} onChange={(e)=>setVat(e.target.value)} />
                     </label>
 
-                    <label className="grid gap-1 sm:col-span-2">
+                    {/* STATUS INVOICE - HALF WIDTH */}
+                    <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Status invoice</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
                              value={status_invoice} onChange={(e)=>setStatusInvoice(e.target.value)} placeholder="paid / unpaid / refunded …" />
@@ -512,6 +519,7 @@
         );
       }
 
+      // ---------- Modale Dettagli ----------
       function DetailModal({ user, onClose, onSave, saving }) {
         const { useState } = React;
         const [form, setForm] = useState({
@@ -543,12 +551,6 @@
             note: form.note || '',
             status_invoice: form.status_invoice || ''
           });
-        }
-
-        function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
-        async function copyToClipboard(text){
-          try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); }
-          catch { alert("Copia non riuscita"); }
         }
 
         return (
@@ -585,6 +587,7 @@
                              onBlur={e=>{ const dt=parseLocalDateStr(e.target.value); if(dt) upd('latest_paid_iso_str', formatLocalDate(dt)); }} />
                     </label>
 
+                    {/* STRIPE - FULL WIDTH with Open+Copy */}
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
                       <div className="flex gap-2">
@@ -608,7 +611,8 @@
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.vat_id||''} onChange={e=>upd('vat_id', e.target.value)} />
                     </label>
 
-                    <label className="grid gap-1 sm:col-span-2">
+                    {/* STATUS INVOICE - HALF WIDTH */}
+                    <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Status invoice</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.status_invoice||''} onChange={e=>upd('status_invoice', e.target.value)} />
                     </label>
