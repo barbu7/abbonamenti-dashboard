@@ -87,10 +87,6 @@
         if (!res.ok) throw new Error('API action error');
         return res.json();
       }
-      function apiExportCsvUrl(companyId){
-        const params = new URLSearchParams({ token: API_TOKEN, action:'export_csv', company_id: companyId });
-        return `${API_URL}?${params.toString()}`;
-      }
 
       function App() {
         const [state, setState] = useState({ company:"1", companies:{} });
@@ -114,7 +110,7 @@
               id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
               discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
               stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-              note: u.note, status: u.status, invoice_url: u.invoice_url
+              note: u.note, status_invoice: u.status_invoice
             });
           });
           return companies;
@@ -128,7 +124,7 @@
           })().catch(err => { console.error(err); alert("Errore nel caricare i dati dall'API."); });
         }, []);
 
-        // FIX: polling sicuro
+        // polling sicuro
         useEffect(() => {
           function startPoll(){
             if (pollRef.current) return;
@@ -196,7 +192,7 @@
               discord_id: user.discord_id||'', user_key: user.user_key||'',
               latest_paid_iso: user.latest_paid_iso||'', stripe_customer_id: user.stripe_customer_id||'',
               country: user.country||'', vat_id: user.vat_id||'', note: user.note||'',
-              status: user.status||'', invoice_url: user.invoice_url||''
+              status_invoice: user.status_invoice||''
             });
             const u = res.user;
             updateCompanyUsers(arr => {
@@ -204,7 +200,7 @@
                 id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso,
                 discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
                 stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-                note: u.note, status: u.status, invoice_url: u.invoice_url
+                note: u.note, status_invoice: u.status_invoice
               });
             });
           } finally { setBusyBtn(null); }
@@ -219,7 +215,7 @@
             };
             const manualISO = isoFromLocalDateStr(user.renewalLocal || "");
             if (manualISO) payload.renewal_iso = manualISO;
-            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status','invoice_url']
+            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status_invoice']
               .forEach(k => { if (user[k] !== undefined) payload[k] = user[k]; });
 
             const res = await apiAction(payload);
@@ -230,7 +226,7 @@
                 id: u.id, name: u.name, plan: u.plan, renewalISO: u.renewal_iso || arr[i].renewalISO,
                 discord_id: u.discord_id, user_key: u.user_key, latest_paid_iso: u.latest_paid_iso,
                 stripe_customer_id: u.stripe_customer_id, country: u.country, vat_id: u.vat_id,
-                note: u.note, status: u.status, invoice_url: u.invoice_url
+                note: u.note, status_invoice: u.status_invoice
               };
             });
           } finally { setBusyBtn(null); }
@@ -251,21 +247,12 @@
           try {
             setBusyBtn('paid:'+u.id);
             const res = await apiAction({ action: 'mark_paid', id: u.id });
-            const nu = res.user;
+            const nu = res.user; // {id, renewal_iso, latest_paid_iso}
             updateCompanyUsers(arr => {
               const i = arr.findIndex(x => x.id === u.id);
-              if (i >= 0) arr[i] = { ...arr[i], renewalISO: nu.renewal_iso };
+              if (i >= 0) arr[i] = { ...arr[i], renewalISO: nu.renewal_iso, latest_paid_iso: nu.latest_paid_iso };
             });
           } finally { setBusyBtn(null); }
-        }
-
-        async function importCsv(file){
-          const text = await file.text();
-          await apiAction({ action:'import_csv', company_id: company, csv_text: text });
-          const d = await apiGetState(company);
-          const mapped = mapApiToCompanies(d);
-          const co = mapped[company] || { name: company==="1"?"Hidden":"Sara", users: [] };
-          setState(s => ({ ...s, companies: { ...s.companies, [company]: co } }));
         }
 
         if (!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Caricamento…</div>;
@@ -280,15 +267,6 @@
                 <div className="flex items-center gap-2">
                   <button className={`px-3 py-1 rounded-full border border-white/30 ${company==="1" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`} onClick={() => switchCompany("1")}>Hidden</button>
                   <button className={`px-3 py-1 rounded-full border border-white/30 ${company==="2" ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`} onClick={() => switchCompany("2")}>Sara</button>
-
-                  <a className="px-3 py-1 rounded-full border border-white/30 bg-blue-500/20"
-                     href={apiExportCsvUrl(company)} download={`users_${company}.csv`}>
-                    ⬇️ Export CSV
-                  </a>
-                  <label className="px-3 py-1 rounded-full border border-white/30 bg-blue-500/20 cursor-pointer">
-                    ⬆️ Import CSV
-                    <input type="file" accept=".csv" className="hidden" onChange={(e)=> e.target.files?.[0] && importCsv(e.target.files[0])} />
-                  </label>
                 </div>
               </div>
             </header>
@@ -409,8 +387,7 @@
         const [country, setCountry] = useState(defaultValues?.country || "");
         const [vat_id, setVat] = useState(defaultValues?.vat_id || "");
         const [note, setNote] = useState(defaultValues?.note || "");
-        const [status, setStatus] = useState(defaultValues?.status || "");
-        const [invoice_url, setInvoiceUrl] = useState(defaultValues?.invoice_url || "");
+        const [status_invoice, setStatusInvoice] = useState(defaultValues?.status_invoice || "");
 
         useEffect(()=>{
           if (!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan))));
@@ -431,7 +408,7 @@
             plan,
             renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
-            country, vat_id, note, status, invoice_url
+            country, vat_id, note, status_invoice
           });
         }
 
@@ -494,7 +471,7 @@
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} />
+                             value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} placeholder="ID o URL https…" />
                     </label>
 
                     <label className="grid gap-1">
@@ -510,15 +487,9 @@
                     </label>
 
                     <label className="grid gap-1 sm:col-span-2">
-                      <span className="text-sm text-blue-900/90">Invoice URL</span>
+                      <span className="text-sm text-blue-900/90">Status invoice</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={invoice_url} onChange={(e)=>setInvoiceUrl(e.target.value)} placeholder="https://..." />
-                    </label>
-
-                    <label className="grid gap-1 sm:col-span-2">
-                      <span className="text-sm text-blue-900/90">Status</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={status} onChange={(e)=>setStatus(e.target.value)} placeholder="active / paused / cancelled…" />
+                             value={status_invoice} onChange={(e)=>setStatusInvoice(e.target.value)} placeholder="paid / unpaid / refunded …" />
                     </label>
 
                     <label className="grid gap-1 sm:col-span-2">
@@ -549,6 +520,7 @@
           latest_paid_iso_str: user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : ''
         });
         function upd(k,v){ setForm(s=>({ ...s, [k]: v })); }
+
         function submit(e){
           e.preventDefault();
           const d1 = parseLocalDateStr(form.renewalLocal);
@@ -569,9 +541,14 @@
             country: form.country || '',
             vat_id: form.vat_id || '',
             note: form.note || '',
-            status: form.status || '',
-            invoice_url: form.invoice_url || ''
+            status_invoice: form.status_invoice || ''
           });
+        }
+
+        function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
+        async function copyToClipboard(text){
+          try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); }
+          catch { alert("Copia non riuscita"); }
         }
 
         return (
@@ -608,18 +585,20 @@
                              onBlur={e=>{ const dt=parseLocalDateStr(e.target.value); if(dt) upd('latest_paid_iso_str', formatLocalDate(dt)); }} />
                     </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Discord ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.discord_id||''} onChange={e=>upd('discord_id', e.target.value)} />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">User Key</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.user_key||''} onChange={e=>upd('user_key', e.target.value)} />
-                    </label>
-                    <label className="grid gap-1">
+                    <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.stripe_customer_id||''} onChange={e=>upd('stripe_customer_id', e.target.value)} />
+                      <div className="flex gap-2">
+                        <input className="flex-1 px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                               value={form.stripe_customer_id||''} onChange={e=>upd('stripe_customer_id', e.target.value)} />
+                        {isUrl(form.stripe_customer_id) && (
+                          <a href={form.stripe_customer_id} target="_blank" rel="noreferrer"
+                             className="px-3 py-2 rounded-xl bg-blue-600 text-white">Apri</a>
+                        )}
+                        <button type="button" onClick={()=>copyToClipboard(form.stripe_customer_id)}
+                                className="px-3 py-2 rounded-xl bg-blue-700 text-white">Copia</button>
+                      </div>
                     </label>
+
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Country</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.country||''} onChange={e=>upd('country', e.target.value)} />
@@ -630,13 +609,10 @@
                     </label>
 
                     <label className="grid gap-1 sm:col-span-2">
-                      <span className="text-sm text-blue-900/90">Invoice URL</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.invoice_url||''} onChange={e=>upd('invoice_url', e.target.value)} placeholder="https://..." />
+                      <span className="text-sm text-blue-900/90">Status invoice</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.status_invoice||''} onChange={e=>upd('status_invoice', e.target.value)} />
                     </label>
-                    <label className="grid gap-1 sm:col-span-2">
-                      <span className="text-sm text-blue-900/90">Status</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={form.status||''} onChange={e=>upd('status', e.target.value)} />
-                    </label>
+
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
                       <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={form.note||''} onChange={e=>upd('note', e.target.value)} />
