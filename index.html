@@ -14,8 +14,8 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-      const API_URL   = "https://script.google.com/macros/s/AKfycbxe0nbY7dUUOyXmrejTWU6KKuDBsk7PujEC0TXwQF2xfCdC11dRHN1rq6hQEFeCoH4f8g/exec";
-      const API_TOKEN = "LoscoBotManagement";
+      const API_URL   = "PASTE_WEB_APP_URL/exec";
+      const API_TOKEN = "PASTE_API_TOKEN";
 
       const { useState, useEffect, useMemo, useRef } = React;
 
@@ -49,6 +49,22 @@
       function planLabel(code){ return code==="2m"?"2 mesi":code==="6m"?"6 mesi":"1 anno"; }
       function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
       async function copyToClipboard(text){ try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); } catch { alert("Copia non riuscita"); } }
+
+      // date-picker helpers
+      function toDateInputValue(dt) {
+        const d = dt instanceof Date ? dt : new Date(dt);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+      function fromDateInputValue(s) {
+        const m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return null;
+        const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
 
       // ---------- API ----------
       async function apiGetState(companyId=null) {
@@ -424,27 +440,40 @@
                     </label>
 
                     <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Data rinnovo (gg/mm/aaaa)</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={renewalLocal}
-                             onChange={(e) => setRenewalLocal(e.target.value)}
-                             onBlur={(e) => { const dt = parseLocalDateStr(e.target.value); if (dt) setRenewalLocal(formatLocalDate(dt)); }}
-                             placeholder="gg/mm/aaaa" required />
+                      <span className="text-sm text-blue-900/90">Data rinnovo</span>
+                      <input
+                        type="date"
+                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                        value={toDateInputValue(parseLocalDateStr(renewalLocal) || new Date())}
+                        onChange={(e) => {
+                          const d = fromDateInputValue(e.target.value);
+                          if (d) setRenewalLocal(formatLocalDate(d));
+                        }}
+                        required
+                      />
                     </label>
 
                     <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Latest paid (gg/mm/aaaa)</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={latest_paid_iso_str}
-                             onChange={(e) => setLatestPaid(e.target.value)}
-                             onBlur={(e) => { const dt = parseLocalDateStr(e.target.value); if (dt) setLatestPaid(formatLocalDate(dt)); }}
-                             placeholder="gg/mm/aaaa" />
+                      <span className="text-sm text-blue-900/90">Latest paid</span>
+                      <input
+                        type="date"
+                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                        value={latest_paid_iso_str ? toDateInputValue(parseLocalDateStr(latest_paid_iso_str)) : ""}
+                        onChange={(e) => {
+                          const d = fromDateInputValue(e.target.value);
+                          setLatestPaid(d ? formatLocalDate(d) : "");
+                        }}
+                      />
                     </label>
 
                     <label className="grid gap-1">
                       <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={stripe_customer_id} onChange={(e)=>setStripeId(e.target.value)} placeholder="ID o URL https…" />
+                      <input
+                        type="url"
+                        className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                        value={stripe_customer_id}
+                        onChange={(e)=>setStripeId(e.target.value)}
+                      />
                     </label>
 
                     <label className="grid gap-1">
@@ -462,7 +491,7 @@
                     <label className="grid gap-2">
                       <span className="text-sm text-blue-900/90">Status invoice</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                             value={status_invoice} onChange={(e)=>setStatusInvoice(e.target.value)} placeholder="paid / unpaid / refunded …" />
+                             value={status_invoice} onChange={(e)=>setStatusInvoice(e.target.value)} />
                     </label>
 
                     {/* Business flag */}
@@ -492,18 +521,12 @@
         );
       }
 
-      // ---------- Modale Dettagli ----------
+      // ---------- Modale Dettagli (solo lettura) ----------
       function DetailModal({ user, onClose }) {
-        function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
-        async function copyToClipboard(text){
-          try { await navigator.clipboard.writeText(String(text||'')); alert("Copiato!"); }
-          catch { alert("Copia non riuscita"); }
-        }
-      
         const renewalStr    = user.renewalISO      ? localDateStrFromISO(user.renewalISO)      : "";
         const latestPaidStr = user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : "";
         const business = !!user.business;
-      
+
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
             <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl border border-blue-200">
@@ -511,53 +534,34 @@
                 <h2 className="text-lg font-semibold text-blue-900">Dettagli utente</h2>
                 <button className="text-blue-700" onClick={onClose}>✕</button>
               </div>
-      
+
               <div className="px-6 py-5 grid gap-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <ReadRow label="Nome" value={user.name} />
                   <ReadRow label="Piano" value={user.plan === "2m" ? "2 mesi" : user.plan === "6m" ? "6 mesi" : "1 anno"} />
-      
+
                   <ReadRow label="Next renewal" value={renewalStr} />
                   <ReadRow label="Latest paid" value={latestPaidStr} />
-      
+
                   <ReadRow label="Discord ID" value={user.discord_id || ""} />
                   <ReadRow label="User Key"   value={user.user_key   || ""} />
-      
-                  {/* Stripe con Apri/Copia solo qui (viewer) */}
+
+                  {/* Stripe con Apri/Copia solo qui */}
                   <div className="grid gap-1 sm:col-span-2">
                     <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
                     <div className="flex gap-2">
-                      <input
-                        className="flex-1 px-3 py-2 border border-blue-200 rounded-xl bg-gray-50"
-                        value={user.stripe_customer_id || ""}
-                        readOnly
-                      />
+                      <input className="flex-1 px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" value={user.stripe_customer_id || ""} readOnly />
                       {isUrl(user.stripe_customer_id) && (
-                        <a
-                          href={user.stripe_customer_id}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 rounded-xl bg-blue-600 text-white"
-                        >
-                          Apri
-                        </a>
+                        <a href={user.stripe_customer_id} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-blue-600 text-white">Apri</a>
                       )}
-                      <button
-                        type="button"
-                        onClick={()=>copyToClipboard(user.stripe_customer_id)}
-                        className="px-3 py-2 rounded-xl bg-blue-700 text-white"
-                      >
-                        Copia
-                      </button>
+                      <button type="button" onClick={()=>copyToClipboard(user.stripe_customer_id)} className="px-3 py-2 rounded-xl bg-blue-700 text-white">Copia</button>
                     </div>
                   </div>
-      
+
                   <ReadRow label="Country" value={user.country || ""} />
                   <ReadRow label="VAT ID"  value={user.vat_id  || ""} />
-      
                   <ReadRow label="Status invoice" value={user.status_invoice || ""} />
-      
-                  {/* Business pill */}
+
                   <div className="grid gap-1">
                     <span className="text-sm text-blue-900/90">Business</span>
                     <div>
@@ -567,31 +571,22 @@
                       </span>
                     </div>
                   </div>
-      
-                  {/* Note a tutta larghezza */}
+
                   <div className="grid gap-1 sm:col-span-2">
                     <span className="text-sm text-blue-900/90">Note</span>
-                    <textarea
-                      className="px-3 py-2 border border-blue-200 rounded-xl bg-gray-50"
-                      rows="3"
-                      value={user.note || ""}
-                      readOnly
-                    />
+                    <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" rows="3" value={user.note || ""} readOnly />
                   </div>
                 </div>
-      
+
                 <div className="flex items-center justify-end mt-2">
-                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">
-                    Chiudi
-                  </button>
+                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Chiudi</button>
                 </div>
               </div>
             </div>
           </div>
         );
       }
-      
-      /* piccola helper per righe read-only */
+
       function ReadRow({ label, value }) {
         return (
           <div className="grid gap-1">
@@ -601,10 +596,8 @@
         );
       }
 
-
       const root = ReactDOM.createRoot(document.getElementById("root"));
       root.render(<App />);
     </script>
   </body>
 </html>
-
