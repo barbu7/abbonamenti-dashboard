@@ -82,6 +82,9 @@
         const [countHidden, setCountHidden] = React.useState(0);
         const [countSara, setCountSara] = React.useState(0);
 
+        // Revenue state
+        const [rev, setRev] = React.useState({ ok:false, hidden:0, sara:0, total:0, items:[] });
+
         function switchCompany(co){ setView("list"); setState(s=>({...s, company:co})); }
 
         function mapApi(data){
@@ -98,11 +101,22 @@
           return companies;
         }
 
+        // Build a quick index by user_id for Revenue enrichment
+        function buildUsersIndex(companies){
+          const idx = {};
+          Object.values(companies).forEach(co=>{
+            (co?.users||[]).forEach(u=>{
+              idx[u.id] = { vat_id: u.vat_id||"", country: u.country||"", business: !!u.business };
+            });
+          });
+          return idx;
+        }
+
         // initial load
         useEffect(()=>{ (async()=>{
           const data=await apiGetState();
           const mapped = mapApi(data);
-          setState({ company:"1", companies: mapped }); 
+          setState({ company:"1", companies: mapped });
           setReady(true);
           updateCountersFrom(mapped);
         })().catch(e=>{ console.error(e); alert("API load error"); }); }, []);
@@ -277,13 +291,10 @@
               if(i>=0) arr.splice(i,1);
             });
             setTransferFor(null);
-            // opzionale: se vai a Deleted Sub quando porti lì
-            // if (target==='4') setState(s=>({...s, company:'4'}));
           } finally { setBusyBtn(null); }
         }
 
-        // Revenue
-        const [rev, setRev] = React.useState({ ok:false, hidden:0, sara:0, total:0, items:[] });
+        // Revenue: load from API
         async function loadRevenue(){
           try{
             const res = await apiAction({ action:'payments_summary' });
@@ -291,6 +302,9 @@
             setRev(res);
           }catch(e){ console.error(e); alert("Revenue load error"); }
         }
+
+        // Users index for Revenue enrichment
+        const usersIndex = useMemo(()=>buildUsersIndex(state.companies), [state.companies]);
 
         // UI
         if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
@@ -338,7 +352,11 @@
 
             <main className="mx-auto max-w-6xl px-4 py-6">
               {view === 'revenue' ? (
-                <RevenueView data={rev} onReload={()=>loadRevenue()} />
+                <RevenueView
+                  data={rev}
+                  onReload={()=>loadRevenue()}
+                  usersIndex={usersIndex}
+                />
               ) : (
                 <>
                   <section className="mb-6 flex flex-wrap items-center gap-2">
@@ -712,26 +730,88 @@
       );}
 
       /* ====== REVENUE VIEW ====== */
-      function RevenueView({ data, onReload }){
+      function RevenueView({ data, onReload, usersIndex }){
+        // Local state to support Reset and Delete (UI-only)
+        const [items, setItems] = useState([]);
+        const [hidden, setHidden] = useState(0);
+        const [sara, setSara] = useState(0);
+        const [total, setTotal] = useState(0);
+        const [q, setQ] = useState("");
+
+        // Initialize from props.data when it changes
+        useEffect(()=>{
+          const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
+          setItems(safeItems);
+          setHidden(Number(data.hidden||0));
+          setSara(Number(data.sara||0));
+          setTotal(Number(data.total||0));
+        }, [data.ok, data.hidden, data.sara, data.total, JSON.stringify(data.items||[])]);
+
+        function companyLabel(cid){
+          return cid==='1'?'Hidden':cid==='2'?'Sara':cid==='4'?'Deleted Sub':cid==='3'?'Other':'-';
+        }
+
+        function onResetTotals(){
+          if (!confirm("Reset totals (Hidden, Sara, Total) a 0?")) return;
+          setHidden(0); setSara(0); setTotal(0);
+        }
+
+        function onDeleteRow(idx){
+          const it = items[idx];
+          if (!it) return;
+          if (!confirm("Eliminare questa riga dalla vista e aggiornare i totali?")) return;
+
+          const amt = Number(it.amount_eur||0);
+          const cid = String(it.company_id||"");
+
+          setItems(prev=>{
+            const copy = prev.slice();
+            copy.splice(idx,1);
+            return copy;
+          });
+
+          if (cid==='1') setHidden(h=>Math.max(0, h-amt));
+          if (cid==='2') setSara(s=>Math.max(0, s-amt));
+          setTotal(t=>Math.max(0, t-amt));
+        }
+
+        // Filter by name (case-insensitive)
+        const filtered = useMemo(()=>{
+          const t = q.trim().toLowerCase();
+          if (!t) return items;
+          return items.filter(it => String(it.name||"").toLowerCase().includes(t));
+        }, [items, q]);
+
         return (
           <section className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
               <h2 className="text-xl font-semibold text-blue-900">Revenue</h2>
-              <button className="ml-auto px-3 py-1.5 rounded-lg bg-blue-700 text-white" onClick={onReload}>Reload</button>
+              <button className="px-3 py-1.5 rounded-lg bg-blue-700 text-white" onClick={onReload}>Reload</button>
+              <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white" onClick={onResetTotals}>Reset</button>
+
+              {/* Search by name */}
+              <div className="ml-auto flex items-center gap-2">
+                <input
+                  className="w-64 px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                  placeholder="Search by name…"
+                  value={q}
+                  onChange={(e)=>setQ(e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Hidden €</div>
-                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.hidden)}</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(hidden)}</div>
               </div>
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Sara €</div>
-                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.sara)}</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(sara)}</div>
               </div>
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Total €</div>
-                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.total)}</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(total)}</div>
               </div>
             </div>
 
@@ -739,26 +819,46 @@
               <table className="w-full text-sm">
                 <thead className="bg-blue-100">
                   <tr className="text-blue-900">
-                    <th className="text-left px-4 py-3">Timestamp</th>
                     <th className="text-left px-4 py-3">Company</th>
                     <th className="text-left px-4 py-3">User</th>
                     <th className="text-right px-4 py-3">Amount (€)</th>
+                    <th className="text-left px-4 py-3">VAT ID</th>
+                    <th className="text-left px-4 py-3">Country</th>
+                    <th className="text-left px-4 py-3">Business</th>
                     <th className="text-left px-4 py-3">Plan</th>
                     <th className="text-left px-4 py-3">Renewal</th>
+                    <th className="text-left px-4 py-3">Delete</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.isArray(data.items) && data.items.length>0 ? data.items.slice().reverse().map((it,idx)=>(
-                    <tr key={idx} className="border-t border-blue-200 bg-white">
-                      <td className="px-4 py-3 text-blue-900/80">{it.timestamp_iso || ''}</td>
-                      <td className="px-4 py-3 text-blue-900/80">{it.company_id==='1'?'Hidden':it.company_id==='2'?'Sara':it.company_id==='4'?'Deleted Sub':it.company_id==='3'?'Other':'-'}</td>
-                      <td className="px-4 py-3 text-blue-900/90">{it.name || ''}</td>
-                      <td className="px-4 py-3 text-blue-900/90 text-right">{eur(it.amount_eur)}</td>
-                      <td className="px-4 py-3 text-blue-900/80">{it.plan || ''}</td>
-                      <td className="px-4 py-3 text-blue-900/80">{localDateStrFromISO(it.renewal_iso)}</td>
-                    </tr>
-                  )) : (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
+                  {filtered.length>0 ? filtered.slice().reverse().map((it,revIdxFromEnd)=>{
+                    // Keep stable original index for delete (reverse view)
+                    const idx = items.indexOf(it);
+                    const userInfo = usersIndex[it.user_id] || { vat_id:"", country:"", business:false };
+                    return (
+                      <tr key={idx>=0?idx:revIdxFromEnd} className="border-t border-blue-200 bg-white">
+                        <td className="px-4 py-3 text-blue-900/80">{companyLabel(String(it.company_id||""))}</td>
+                        <td className="px-4 py-3 text-blue-900/90">{it.name || ''}</td>
+                        <td className="px-4 py-3 text-blue-900/90 text-right">{eur(it.amount_eur)}</td>
+                        <td className="px-4 py-3 text-blue-900/80">{userInfo.vat_id}</td>
+                        <td className="px-4 py-3 text-blue-900/80">{userInfo.country}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-block w-3 h-3 rounded-full ${userInfo.business?'bg-emerald-500':'bg-red-500'}`} title={userInfo.business ? 'Yes' : 'No'}></span>
+                        </td>
+                        <td className="px-4 py-3 text-blue-900/80">{it.plan || ''}</td>
+                        <td className="px-4 py-3 text-blue-900/80">{localDateStrFromISO(it.renewal_iso)}</td>
+                        <td className="px-4 py-2">
+                          <button
+                            className="px-3 py-1.5 rounded-md bg-red-600 text-white"
+                            onClick={()=>onDeleteRow(idx)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
                   )}
                 </tbody>
               </table>
@@ -772,5 +872,3 @@
     </script>
   </body>
 </html>
-
-
