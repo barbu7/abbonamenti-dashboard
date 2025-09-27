@@ -226,11 +226,9 @@
           try{
             setBusyBtn('edit');
             if (opts.cancelSub) {
-              // conferma secondaria
               if (!confirm("Confermi lo spostamento in 'Deleted Sub'?")) return;
               const res = await apiAction({ action:'cancel_sub', id:user.id });
               if (res.error){ alert(res.error); return; }
-              // rimuovi localmente dalla lista corrente
               updateCompanyUsers(arr=>{
                 const i=arr.findIndex(x=>x.id===user.id);
                 if(i>=0) arr.splice(i,1);
@@ -360,7 +358,7 @@
               ) : (
                 <>
                   <section className="mb-6 flex flex-wrap items-center gap-2">
-                    {/* Left: search + sort (prende spazio) */}
+                    {/* Left: search + sort */}
                     <div className="flex flex-wrap items-center gap-2 grow">
                       <input
                         className="w-64 px-3 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
@@ -387,7 +385,7 @@
                       </select>
                     </div>
                   
-                    {/* Right: add + counter (resta allineato a destra) */}
+                    {/* Right: add + counter */}
                     <div className="flex items-center gap-3 shrink-0">
                       <button
                         onClick={()=>{ setEditUser(null); setShowForm(true); }}
@@ -409,16 +407,15 @@
                     </div>
                   </section>
                   
-
                   {/* List */}
                   <section className="bg-blue-50 rounded-2xl border border-blue-200 shadow-sm overflow-visible">
                     <table className="w-full text-sm">
                       <thead className="bg-blue-100">
                         <tr className="text-blue-900">
                           <th className="text-left px-4 py-3">Name</th>
-                          {!isDeletedSub && <th className="text-left px-4 py-3">Plan</th>}
-                          {!isDeletedSub && <th className="text-left px-4 py-3">Renewal date</th>}
-                          {!isDeletedSub && <th className="text-left px-4 py-3">Days left</th>}
+                          {state.company!=='4' && <th className="text-left px-4 py-3">Plan</th>}
+                          {state.company!=='4' && <th className="text-left px-4 py-3">Renewal date</th>}
+                          {state.company!=='4' && <th className="text-left px-4 py-3">Days left</th>}
                           <th className="text-left px-4 py-3">Business</th>
                           <th className="text-left px-4 py-3">Actions</th>
                           <th className="text-left px-4 py-3">Note</th>
@@ -437,9 +434,9 @@
                           return (
                             <tr key={u.id} className="border-t border-blue-200 bg-white">
                               <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
-                              {!isDeletedSub && <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>}
-                              {!isDeletedSub && <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>}
-                              {!isDeletedSub && <td className={`px-4 py-3 font-semibold ${color}`}>{isFinite(days)?days:'-'}</td>}
+                              {state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>}
+                              {state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>}
+                              {state.company!=='4' && <td className={`px-4 py-3 font-semibold ${color}`}>{isFinite(days)?days:'-'}</td>}
                               <td className="px-4 py-3">
                                 <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
                               </td>
@@ -447,19 +444,14 @@
                               {/* ACTIONS */}
                               <td className="px-4 py-2">
                                 <div className="flex items-center gap-1">
-                                  {/* Mark paid (anche in Deleted Sub lasciamo disattivato) */}
-                                  <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey || isDeletedSub}
-                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${(busyBtn===paidKey||isDeletedSub)?'bg-emerald-400/50 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>
+                                  <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey || state.company==='4'}
+                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${(busyBtn===paidKey||state.company==='4')?'bg-emerald-400/50 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>
                                     <IconCheck className="w-5 h-5" />
                                   </button>
-
-                                  {/* Edit (con Cancel Sub) */}
                                   <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
                                     className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90">
                                     <IconPencil className="w-5 h-5" />
                                   </button>
-
-                                  {/* Transfer - include Deleted Sub */}
                                   <div className="relative">
                                     <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)} disabled={busyBtn===trKey}
                                       className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-500 text-white hover:opacity-90">
@@ -475,7 +467,7 @@
                                             {id:"2", lab:"to Sara"},
                                             {id:"4", lab:"to Deleted Sub"},
                                             {id:"3", lab:"to Other"},
-                                          ].filter(t=>t.id!==company).map(t=>(
+                                          ].filter(t=>t.id!==state.company).map(t=>(
                                             <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
                                               className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
                                               {t.lab}
@@ -485,8 +477,6 @@
                                       </div>
                                     )}
                                   </div>
-
-                                  {/* Delete */}
                                   <button title="Delete" onClick={()=>removeUserLocal(u.id)} disabled={busyBtn===rmKey}
                                     className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===rmKey?'bg-red-400':'bg-red-600 hover:opacity-90'}`}>
                                     <IconTrash className="w-5 h-5" />
@@ -494,7 +484,6 @@
                                 </div>
                               </td>
 
-                              {/* NOTE */}
                               <td className="px-4 py-3 text-blue-900/80">{noteShort}</td>
                             </tr>
                           )
@@ -543,7 +532,6 @@
         const [note,setNote]=useState(defaultValues?.note||"");
         const [status_invoice,setStatus]=useState(defaultValues?.status_invoice||"");
         const [business,setBusiness]=useState(!!defaultValues?.business);
-        // Cancel Sub tick (solo in Edit)
         const [cancelSub, setCancelSub] = useState(false);
 
         useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
@@ -731,14 +719,12 @@
 
       /* ====== REVENUE VIEW ====== */
       function RevenueView({ data, onReload, usersIndex }){
-        // Local state to support Reset and Delete (UI-only)
         const [items, setItems] = useState([]);
         const [hidden, setHidden] = useState(0);
         const [sara, setSara] = useState(0);
         const [total, setTotal] = useState(0);
         const [q, setQ] = useState("");
 
-        // Initialize from props.data when it changes
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
           setItems(safeItems);
@@ -751,36 +737,31 @@
           return cid==='1'?'Hidden':cid==='2'?'Sara':cid==='4'?'Deleted Sub':cid==='3'?'Other':'-';
         }
 
-        function onResetTotals(){
-          if (!confirm("Reset totals (Hidden, Sara, Total) a 0?")) return;
-          setHidden(0); setSara(0); setTotal(0);
+        async function onResetTotals(){
+          if (!confirm("Reset: eliminare TUTTE le righe in Payments e azzerare i totali?")) return;
+          const res = await apiAction({ action:'payments_reset' });
+          if (res.error){ alert(res.error); return; }
+          // ricarica dallo sheet
+          await onReload();
         }
 
-        function onDeleteRow(idx){
-          const it = items[idx];
-          if (!it) return;
-          if (!confirm("Eliminare questa riga dalla vista e aggiornare i totali?")) return;
-
-          const amt = Number(it.amount_eur||0);
-          const cid = String(it.company_id||"");
-
-          setItems(prev=>{
-            const copy = prev.slice();
-            copy.splice(idx,1);
-            return copy;
-          });
-
-          if (cid==='1') setHidden(h=>Math.max(0, h-amt));
-          if (cid==='2') setSara(s=>Math.max(0, s-amt));
-          setTotal(t=>Math.max(0, t-amt));
+        async function onDeleteRow(row_index){
+          if (!row_index) return;
+          if (!confirm("Eliminare questa riga dai Payments e aggiornare i totali?")) return;
+          const res = await apiAction({ action:'payments_delete', row_index });
+          if (res.error){ alert(res.error); return; }
+          // ricarica dallo sheet
+          await onReload();
         }
 
-        // Filter by name (case-insensitive)
         const filtered = useMemo(()=>{
           const t = q.trim().toLowerCase();
           if (!t) return items;
           return items.filter(it => String(it.name||"").toLowerCase().includes(t));
         }, [items, q]);
+
+        // Visualizziamo gli item in ordine inverso (più recenti in alto)
+        const viewItems = filtered.slice().reverse();
 
         return (
           <section className="space-y-4">
@@ -803,15 +784,15 @@
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Hidden €</div>
-                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(hidden)}</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.hidden)}</div>
               </div>
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Sara €</div>
-                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(sara)}</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.sara)}</div>
               </div>
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Total €</div>
-                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(total)}</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.total)}</div>
               </div>
             </div>
 
@@ -831,12 +812,10 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length>0 ? filtered.slice().reverse().map((it,revIdxFromEnd)=>{
-                    // Keep stable original index for delete (reverse view)
-                    const idx = items.indexOf(it);
+                  {viewItems.length>0 ? viewItems.map((it,idx)=> {
                     const userInfo = usersIndex[it.user_id] || { vat_id:"", country:"", business:false };
                     return (
-                      <tr key={idx>=0?idx:revIdxFromEnd} className="border-t border-blue-200 bg-white">
+                      <tr key={`${it.row_index}-${idx}`} className="border-top border-blue-200 bg-white">
                         <td className="px-4 py-3 text-blue-900/80">{companyLabel(String(it.company_id||""))}</td>
                         <td className="px-4 py-3 text-blue-900/90">{it.name || ''}</td>
                         <td className="px-4 py-3 text-blue-900/90 text-right">{eur(it.amount_eur)}</td>
@@ -849,10 +828,11 @@
                         <td className="px-4 py-3 text-blue-900/80">{localDateStrFromISO(it.renewal_iso)}</td>
                         <td className="px-4 py-2">
                           <button
-                            className="px-3 py-1.5 rounded-md bg-red-600 text-white"
-                            onClick={()=>onDeleteRow(idx)}
+                            title="Delete payment"
+                            onClick={()=>onDeleteRow(it.row_index)}
+                            className="inline-grid place-items-center w-8 h-8 rounded-md text-white bg-red-600 hover:opacity-90"
                           >
-                            Delete
+                            <IconTrash className="w-5 h-5" />
                           </button>
                         </td>
                       </tr>
