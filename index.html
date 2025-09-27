@@ -355,19 +355,27 @@
                         <option value="desc">Desc</option>
                       </select>
 
-                      {/* Add user + COUNTERS a destra */}
-                      <div className="ml-auto flex items-center gap-3">
-                        <button onClick={()=>{ setEditUser(null); setShowForm(true); }} className="px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
+                      {/* Add user + COUNTER (stessa riga, solo tab corrente) */}
+                      <div className="ml-auto flex items-center gap-3 flex-nowrap">
+                        <button
+                          onClick={()=>{ setEditUser(null); setShowForm(true); }}
+                          className="px-4 py-2 rounded-xl bg-blue-700 text-white shadow whitespace-nowrap"
+                        >
                           {busyBtn==='add' ? 'Saving…' : '➕ Add user'}
                         </button>
-                        <span className="text-sm text-blue-900/80 bg-white/70 rounded-full px-3 py-1 border border-blue-300">
-                          Hidden: <b>{countHidden}</b>
-                        </span>
-                        <span className="text-sm text-blue-900/80 bg-white/70 rounded-full px-3 py-1 border border-blue-300">
-                          Sara: <b>{countSara}</b>
-                        </span>
+                      
+                        {state.company === '1' && (
+                          <span className="inline-flex items-center h-9 whitespace-nowrap text-sm text-blue-900/80 bg-white/70 rounded-full px-3 border border-blue-300">
+                            User count: <b className="ml-1">{countHidden}</b>
+                          </span>
+                        )}
+                      
+                        {state.company === '2' && (
+                          <span className="inline-flex items-center h-9 whitespace-nowrap text-sm text-blue-900/80 bg-white/70 rounded-full px-3 border border-blue-300">
+                            User count: <b className="ml-1">{countSara}</b>
+                          </span>
+                        )}
                       </div>
-                    </div>
                   </section>
 
                   {/* List */}
