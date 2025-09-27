@@ -101,7 +101,6 @@
           return companies;
         }
 
-        // Build a quick index by user_id for Revenue enrichment
         function buildUsersIndex(companies){
           const idx = {};
           Object.values(companies).forEach(co=>{
@@ -193,7 +192,6 @@
             const co={ ...companies[coId], users:[...(companies[coId]?.users||[])] };
             updater(co.users);
             companies[coId]=co;
-            // update counters after mutation
             setTimeout(()=>updateCountersFrom(companies),0);
             return {...s, companies};
           });
@@ -222,7 +220,6 @@
         }
 
         async function updateUserLocal(user, opts={}){
-          // opts.cancelSub = boolean
           try{
             setBusyBtn('edit');
             if (opts.cancelSub) {
@@ -237,8 +234,7 @@
               return;
             }
 
-            const payload={ action:'update', id:user.id, company_id: company,
-              name:user.name, plan:user.plan };
+            const payload={ action:'update', id:user.id, company_id: company, name:user.name, plan:user.plan };
             const manualISO=isoFromLocalDateStr(user.renewalLocal||"");
             if(manualISO) payload.renewal_iso=manualISO;
             ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status_invoice','business']
@@ -270,7 +266,7 @@
         async function markPaidLocal(u){
           try{
             setBusyBtn('paid:'+u.id);
-            const amount = prompt("Importo ricevuto (€):", ""); // vuoto = nessun log pagamento
+            const amount = prompt("Importo ricevuto (€):", "");
             const res=await apiAction({ action:'mark_paid', id:u.id, amount_eur: amount });
             const nu=res.user;
             updateCompanyUsers(arr=>{
@@ -292,7 +288,7 @@
           } finally { setBusyBtn(null); }
         }
 
-        // Revenue: load from API
+        // Revenue
         async function loadRevenue(){
           try{
             const res = await apiAction({ action:'payments_summary' });
@@ -301,12 +297,9 @@
           }catch(e){ console.error(e); alert("Revenue load error"); }
         }
 
-        // Users index for Revenue enrichment
         const usersIndex = useMemo(()=>buildUsersIndex(state.companies), [state.companies]);
 
-        // UI
         if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
-
         const isDeletedSub = state.company === '4';
 
         return (
@@ -358,7 +351,6 @@
               ) : (
                 <>
                   <section className="mb-6 flex flex-wrap items-center gap-2">
-                    {/* Left: search + sort */}
                     <div className="flex flex-wrap items-center gap-2 grow">
                       <input
                         className="w-64 px-3 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
@@ -385,7 +377,6 @@
                       </select>
                     </div>
                   
-                    {/* Right: add + counter */}
                     <div className="flex items-center gap-3 shrink-0">
                       <button
                         onClick={()=>{ setEditUser(null); setShowForm(true); }}
@@ -422,6 +413,7 @@
                         </tr>
                       </thead>
                       <tbody>
+                        {/* ... (lista utenti invariata) ... */}
                         {filtered.length===0 && (
                           <tr><td colSpan={7} className="px-4 py-8 text-center text-blue-900/60">No users</td></tr>
                         )}
@@ -441,11 +433,10 @@
                                 <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
                               </td>
 
-                              {/* ACTIONS */}
                               <td className="px-4 py-2">
                                 <div className="flex items-center gap-1">
                                   <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey || state.company==='4'}
-                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${(busyBtn===paidKey||state.company==='4')?'bg-emerald-400/50 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>
+                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${(busyBtn===paidKey||state.company==='4')?'bg-emerald-400 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>
                                     <IconCheck className="w-5 h-5" />
                                   </button>
                                   <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
@@ -725,6 +716,9 @@
         const [total, setTotal] = useState(0);
         const [q, setQ] = useState("");
 
+        // Busy state for reset/delete
+        const [revBusy, setRevBusy] = useState(null); // null | 'reset' | `delete:${row_index}`
+
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
           setItems(safeItems);
@@ -738,20 +732,30 @@
         }
 
         async function onResetTotals(){
+          if (revBusy) return;
           if (!confirm("Reset: eliminare TUTTE le righe in Payments e azzerare i totali?")) return;
-          const res = await apiAction({ action:'payments_reset' });
-          if (res.error){ alert(res.error); return; }
-          // ricarica dallo sheet
-          await onReload();
+          try{
+            setRevBusy('reset');
+            const res = await apiAction({ action:'payments_reset' });
+            if (res.error){ alert(res.error); return; }
+            await onReload();
+          } finally {
+            setRevBusy(null);
+          }
         }
 
         async function onDeleteRow(row_index){
+          if (revBusy) return;
           if (!row_index) return;
           if (!confirm("Eliminare questa riga dai Payments e aggiornare i totali?")) return;
-          const res = await apiAction({ action:'payments_delete', row_index });
-          if (res.error){ alert(res.error); return; }
-          // ricarica dallo sheet
-          await onReload();
+          try{
+            setRevBusy(`delete:${row_index}`);
+            const res = await apiAction({ action:'payments_delete', row_index });
+            if (res.error){ alert(res.error); return; }
+            await onReload();
+          } finally {
+            setRevBusy(null);
+          }
         }
 
         const filtered = useMemo(()=>{
@@ -760,15 +764,26 @@
           return items.filter(it => String(it.name||"").toLowerCase().includes(t));
         }, [items, q]);
 
-        // Visualizziamo gli item in ordine inverso (più recenti in alto)
         const viewItems = filtered.slice().reverse();
 
         return (
           <section className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <h2 className="text-xl font-semibold text-blue-900">Revenue</h2>
-              <button className="px-3 py-1.5 rounded-lg bg-blue-700 text-white" onClick={onReload}>Reload</button>
-              <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white" onClick={onResetTotals}>Reset</button>
+              <button
+                className={`px-3 py-1.5 rounded-lg text-white ${revBusy ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-700 hover:opacity-90'}`}
+                onClick={onReload}
+                disabled={!!revBusy}
+              >
+                Reload
+              </button>
+              <button
+                className={`px-3 py-1.5 rounded-lg text-white ${revBusy ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:opacity-90'}`}
+                onClick={onResetTotals}
+                disabled={!!revBusy}
+              >
+                {revBusy === 'reset' ? 'Resetting…' : 'Reset'}
+              </button>
 
               {/* Search by name */}
               <div className="ml-auto flex items-center gap-2">
@@ -777,6 +792,7 @@
                   placeholder="Search by name…"
                   value={q}
                   onChange={(e)=>setQ(e.target.value)}
+                  disabled={!!revBusy}
                 />
               </div>
             </div>
@@ -830,7 +846,10 @@
                           <button
                             title="Delete payment"
                             onClick={()=>onDeleteRow(it.row_index)}
-                            className="inline-grid place-items-center w-8 h-8 rounded-md text-white bg-red-600 hover:opacity-90"
+                            disabled={!!revBusy}
+                            className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${
+                              revBusy ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:opacity-90'
+                            }`}
                           >
                             <IconTrash className="w-5 h-5" />
                           </button>
