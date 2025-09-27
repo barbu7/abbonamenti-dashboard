@@ -352,12 +352,25 @@
                 <>
                   <section className="mb-6 flex flex-wrap items-center gap-2">
                     <div className="flex flex-wrap items-center gap-2 grow">
-                      <input
-                        className="w-64 px-3 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
-                        placeholder="Search by name or note…"
-                        value={query}
-                        onChange={(e)=>setQuery(e.target.value)}
-                      />
+                      <div className="relative">
+                        <input
+                          className="w-64 px-3 pr-8 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
+                          placeholder="Search by name…"
+                          value={query}
+                          onChange={(e)=>setQuery(e.target.value)}
+                        />
+                        {query && (
+                          <button
+                            type="button"
+                            aria-label="Clear search"
+                            onClick={()=>setQuery("")}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-700 hover:opacity-80"
+                            title="Clear"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                       <label className="text-sm text-blue-900/80">Sort by:</label>
                       <select
                         className="px-2 py-2 border border-blue-200 rounded-xl bg-white"
@@ -787,15 +800,30 @@
 
               {/* Search by name */}
               <div className="ml-auto flex items-center gap-2">
-                <input
-                  className="w-64 px-3 py-2 border border-blue-200 rounded-xl bg-white"
-                  placeholder="Search by name…"
-                  value={q}
-                  onChange={(e)=>setQ(e.target.value)}
-                  disabled={!!revBusy}
-                />
+                <div className="relative">
+                  <input
+                    className="w-64 px-3 pr-8 py-2 border border-blue-200 rounded-xl bg-white"
+                    placeholder="Search by name…"
+                    value={q}
+                    onChange={(e)=>setQ(e.target.value)}
+                    disabled={!!revBusy}
+                  />
+                  {q && (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      onClick={()=>setQ("")}
+                      disabled={!!revBusy}
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 ${
+                        revBusy ? 'text-blue-400 cursor-not-allowed' : 'text-blue-700 hover:opacity-80'
+                      }`}
+                      title="Clear"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
 
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
