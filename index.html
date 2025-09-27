@@ -35,6 +35,7 @@
       function planLabel(code){ return code==="2m"?"2 months":code==="6m"?"6 months":"1 year"; }
       function isUrl(s){ return /^https?:\/\//i.test(String(s||'')); }
       async function copyToClipboard(text){ try{ await navigator.clipboard.writeText(String(text||'')); alert("Copied!"); } catch{ alert("Copy failed"); } }
+      function eur(n){ return (Number(n||0)).toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 
       /* ====== API ====== */
       async function apiGetState(companyId=null){
@@ -74,9 +75,14 @@
         const [busyBtn,setBusyBtn]= React.useState(null);
         const [detailUser,setDetailUser]= React.useState(null);
         const [transferFor,setTransferFor]= React.useState(null);
+        const [view,setView]= React.useState("list"); // "list" | "revenue"
         const pollRef = React.useRef(null);
 
-        function switchCompany(co){ setState(s=>({...s, company:co})); }
+        // counters
+        const [countHidden, setCountHidden] = React.useState(0);
+        const [countSara, setCountSara] = React.useState(0);
+
+        function switchCompany(co){ setView("list"); setState(s=>({...s, company:co})); }
 
         function mapApi(data){
           const companies={};
@@ -92,18 +98,25 @@
           return companies;
         }
 
+        // initial load
         useEffect(()=>{ (async()=>{
           const data=await apiGetState();
-          setState({ company:"1", companies: mapApi(data) }); setReady(true);
+          const mapped = mapApi(data);
+          setState({ company:"1", companies: mapped }); 
+          setReady(true);
+          updateCountersFrom(mapped);
         })().catch(e=>{ console.error(e); alert("API load error"); }); }, []);
 
+        // polling + visibility refresh
         useEffect(()=>{
           function start(){ if(pollRef.current) return;
             pollRef.current=setInterval(async()=>{
-              try{ const data=await apiGetState(state.company);
+              try{ 
+                const data=await apiGetState(state.company);
                 const mapped=mapApi(data);
-                const co=mapped[state.company] || { name: state.company==="1"?"Hidden":state.company==="2"?"Sara":"Other", users:[] };
+                const co=mapped[state.company] || { name: state.company, users:[] };
                 setState(s=>({...s, companies:{ ...s.companies, [state.company]: co }}));
+                updateCountersFrom({ ...state.companies, [state.company]: co });
               }catch(e){ console.warn("poll error",e); }
             }, 60000);
           }
@@ -112,8 +125,9 @@
             if(document.visibilityState==='visible'){ try{
               const data=await apiGetState(state.company);
               const mapped=mapApi(data);
-              const co=mapped[state.company] || { name: state.company==="1"?"Hidden":state.company==="2"?"Sara":"Other", users:[] };
+              const co=mapped[state.company] || { name: state.company, users:[] };
               setState(s=>({...s, companies:{ ...s.companies, [state.company]: co }}));
+              updateCountersFrom({ ...state.companies, ...mapped });
             }catch{} start(); } else { stop(); }
           }
           document.addEventListener('visibilitychange',onVis);
@@ -121,8 +135,29 @@
           return ()=>{ document.removeEventListener('visibilitychange',onVis); stop(); }
         }, [state.company]);
 
+        // manual refresh
+        async function manualRefresh(all=false){
+          try{
+            const data = await apiGetState(all ? null : state.company);
+            let mapped = mapApi(data);
+            if(!all){
+              const co=mapped[state.company] || { name: state.company, users:[] };
+              mapped = { ...state.companies, [state.company]: co };
+            }
+            setState(s=>({ ...s, companies: all ? mapped : { ...s.companies, ...mapped } }));
+            updateCountersFrom(all ? mapped : { ...state.companies, ...mapped });
+          }catch(e){ console.error(e); alert("Refresh failed"); }
+        }
+
+        function updateCountersFrom(companies){
+          const hidden = (companies['1']?.users || []).length;
+          const sara   = (companies['2']?.users || []).length;
+          setCountHidden(hidden);
+          setCountSara(sara);
+        }
+
         const company = state.company;
-        const current = state.companies[company] || { name: company==="1"?"Hidden":company==="2"?"Sara":"Other", users:[] };
+        const current = state.companies[company] || { name: company, users:[] };
         const users = current.users || [];
 
         const filtered = useMemo(()=>{
@@ -144,6 +179,8 @@
             const co={ ...companies[coId], users:[...(companies[coId]?.users||[])] };
             updater(co.users);
             companies[coId]=co;
+            // update counters after mutation
+            setTimeout(()=>updateCountersFrom(companies),0);
             return {...s, companies};
           });
         }
@@ -170,9 +207,24 @@
           } finally { setBusyBtn(null); }
         }
 
-        async function updateUserLocal(user){
+        async function updateUserLocal(user, opts={}){
+          // opts.cancelSub = boolean
           try{
             setBusyBtn('edit');
+            if (opts.cancelSub) {
+              // conferma secondaria
+              if (!confirm("Confermi lo spostamento in 'Deleted Sub'?")) return;
+              const res = await apiAction({ action:'cancel_sub', id:user.id });
+              if (res.error){ alert(res.error); return; }
+              // rimuovi localmente dalla lista corrente
+              updateCompanyUsers(arr=>{
+                const i=arr.findIndex(x=>x.id===user.id);
+                if(i>=0) arr.splice(i,1);
+              });
+              setView("list");
+              return;
+            }
+
             const payload={ action:'update', id:user.id, company_id: company,
               name:user.name, plan:user.plan };
             const manualISO=isoFromLocalDateStr(user.renewalLocal||"");
@@ -206,7 +258,8 @@
         async function markPaidLocal(u){
           try{
             setBusyBtn('paid:'+u.id);
-            const res=await apiAction({ action:'mark_paid', id:u.id });
+            const amount = prompt("Importo ricevuto (€):", ""); // vuoto = nessun log pagamento
+            const res=await apiAction({ action:'mark_paid', id:u.id, amount_eur: amount });
             const nu=res.user;
             updateCompanyUsers(arr=>{
               const i=arr.findIndex(x=>x.id===u.id);
@@ -219,16 +272,30 @@
           try{
             setBusyBtn('transfer:'+u.id);
             await apiAction({ action:'transfer', id:u.id, target_company_id: target });
-            // remove from current list immediately
             updateCompanyUsers(arr=>{
               const i=arr.findIndex(x=>x.id===u.id);
               if(i>=0) arr.splice(i,1);
             });
             setTransferFor(null);
+            // opzionale: se vai a Deleted Sub quando porti lì
+            // if (target==='4') setState(s=>({...s, company:'4'}));
           } finally { setBusyBtn(null); }
         }
 
+        // Revenue
+        const [rev, setRev] = React.useState({ ok:false, hidden:0, sara:0, total:0, items:[] });
+        async function loadRevenue(){
+          try{
+            const res = await apiAction({ action:'payments_summary' });
+            if (res.error) { alert(res.error); return; }
+            setRev(res);
+          }catch(e){ console.error(e); alert("Revenue load error"); }
+        }
+
+        // UI
         if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
+
+        const isDeletedSub = state.company === '4';
 
         return (
           <div className="min-h-screen">
@@ -238,141 +305,183 @@
                   <img src="Losco_Bot.png" alt="LOSCOBOT" className="h-9 w-9 rounded-md shadow-sm select-none" draggable="false" width="36" height="36" />
                   <span className="text-2xl font-bold drop-shadow">LOSCOBOT Subscriptions Dashboard</span>
                 </a>
+
+                {/* Tabs + Refresh */}
                 <div className="flex items-center gap-2">
                   {[
                     {id:"1", label:"Hidden"},
                     {id:"2", label:"Sara"},
+                    {id:"4", label:"Deleted Sub"},
                     {id:"3", label:"Other"},
                   ].map(tab=>(
                     <button key={tab.id}
-                      className={`px-3 py-1 rounded-full border border-white/30 ${company===tab.id ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                      className={`px-3 py-1 rounded-full border border-white/30 ${state.company===tab.id && view==='list' ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
                       onClick={()=>switchCompany(tab.id)}
                     >
                       {tab.label}
                     </button>
                   ))}
+                  <button
+                    className={`px-3 py-1 rounded-full border border-white/30 ${view==='revenue' ? "bg-white text-blue-700" : "bg-blue-500/20 text-white"}`}
+                    onClick={()=>{ setView('revenue'); loadRevenue(); }}
+                  >
+                    Revenue
+                  </button>
+                  <button id="btn-refresh" title="Refresh"
+                          className="px-3 py-1 rounded-full border border-white/50 bg-blue-500/30 hover:bg-blue-500/40"
+                          onClick={()=>manualRefresh(true)}>
+                    🔄
+                  </button>
                 </div>
               </div>
             </header>
 
             <main className="mx-auto max-w-6xl px-4 py-6">
-              <section className="mb-6 grid gap-3 md:grid-cols-3">
-                <div className="col-span-2 flex flex-wrap items-center gap-2">
-                  <input className="w-64 px-3 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
-                         placeholder="Search by name or note…" value={query} onChange={(e)=>setQuery(e.target.value)} />
-                  <label className="text-sm text-blue-900/80">Sort by:</label>
-                  <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white" value={sortKey} onChange={(e)=>setSortKey(e.target.value)}>
-                    <option value="renewal">Renewal date</option>
-                    <option value="name">Name</option>
-                  </select>
-                  <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white" value={sortDir} onChange={(e)=>setSortDir(e.target.value)}>
-                    <option value="asc">Asc</option>
-                    <option value="desc">Desc</option>
-                  </select>
-                  <button onClick={()=>{ setEditUser(null); setShowForm(true); }} className="ml-auto px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
-                    {busyBtn==='add' ? 'Saving…' : '➕ Add user'}
-                  </button>
-                </div>
-              </section>
+              {view === 'revenue' ? (
+                <RevenueView data={rev} onReload={()=>loadRevenue()} />
+              ) : (
+                <>
+                  <section className="mb-6 grid gap-3 md:grid-cols-3">
+                    <div className="col-span-2 flex flex-wrap items-center gap-2">
+                      <input className="w-64 px-3 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
+                            placeholder="Search by name or note…" value={query} onChange={(e)=>setQuery(e.target.value)} />
+                      <label className="text-sm text-blue-900/80">Sort by:</label>
+                      <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white" value={sortKey} onChange={(e)=>setSortKey(e.target.value)}>
+                        <option value="renewal">Renewal date</option>
+                        <option value="name">Name</option>
+                      </select>
+                      <select className="px-2 py-2 border border-blue-200 rounded-xl bg-white" value={sortDir} onChange={(e)=>setSortDir(e.target.value)}>
+                        <option value="asc">Asc</option>
+                        <option value="desc">Desc</option>
+                      </select>
 
-              {/* overflow-visible to avoid clipping drop-downs */}
-              <section className="bg-blue-50 rounded-2xl border border-blue-200 shadow-sm overflow-visible">
-                <table className="w-full text-sm">
-                  <thead className="bg-blue-100">
-                    <tr className="text-blue-900">
-                      <th className="text-left px-4 py-3">Name</th>
-                      <th className="text-left px-4 py-3">Plan</th>
-                      <th className="text-left px-4 py-3">Renewal date</th>
-                      <th className="text-left px-4 py-3">Days left</th>
-                      <th className="text-left px-4 py-3">Business</th>
-                      <th className="text-left px-4 py-3">Actions</th>
-                      <th className="text-left px-4 py-3">Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.length===0 && (
-                      <tr><td colSpan={7} className="px-4 py-8 text-center text-blue-900/60">No users</td></tr>
-                    )}
-                    {filtered.map(u=>{
-                      const days=diffInDays(endOfTodayISO(), u.renewalISO);
-                      const renewalStr=localDateStrFromISO(u.renewalISO);
-                      const color = days<0 ? "text-red-600" : days<=3 ? "text-amber-600" : "text-emerald-700";
-                      const rmKey='remove:'+u.id, paidKey='paid:'+u.id, trKey='transfer:'+u.id;
-                      const noteShort = (u.note||'').length>80 ? (u.note.slice(0,80)+'…') : (u.note||'');
-                      return (
-                        <tr key={u.id} className="border-t border-blue-200 bg-white">
-                          <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
-                          <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>
-                          <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>
-                          <td className={`px-4 py-3 font-semibold ${color}`}>{days}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
-                          </td>
+                      {/* Add user + COUNTERS a destra */}
+                      <div className="ml-auto flex items-center gap-3">
+                        <button onClick={()=>{ setEditUser(null); setShowForm(true); }} className="px-4 py-2 rounded-xl bg-blue-700 text-white shadow">
+                          {busyBtn==='add' ? 'Saving…' : '➕ Add user'}
+                        </button>
+                        <span className="text-sm text-blue-900/80 bg-white/70 rounded-full px-3 py-1 border border-blue-300">
+                          Hidden: <b>{countHidden}</b>
+                        </span>
+                        <span className="text-sm text-blue-900/80 bg-white/70 rounded-full px-3 py-1 border border-blue-300">
+                          Sara: <b>{countSara}</b>
+                        </span>
+                      </div>
+                    </div>
+                  </section>
 
-                          {/* ACTIONS (penultima) */}
-                          <td className="px-4 py-2">
-                            <div className="flex items-center gap-1">
-                              <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey}
-                                className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===paidKey?'bg-emerald-400':'bg-emerald-600 hover:opacity-90'}`}>
-                                <IconCheck className="w-5 h-5" />
-                              </button>
-                              <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
-                                className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90">
-                                <IconPencil className="w-5 h-5" />
-                              </button>
-                              <div className="relative">
-                                <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)} disabled={busyBtn===trKey}
-                                  className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-500 text-white hover:opacity-90">
-                                  <IconArrows className="w-5 h-5" />
-                                </button>
-                                {transferFor===u.id && (
-                                  <div className="absolute right-0 top-full translate-y-1 z-50 bg-white border border-blue-200 rounded-lg shadow px-2 py-2 w-40">
-                                    {busyBtn===trKey ? (
-                                      <div className="px-3 py-1.5 text-blue-900/70">Moving…</div>
-                                    ) : (
-                                      [
-                                        {id:"1", lab:"to Hidden"},
-                                        {id:"2", lab:"to Sara"},
-                                        {id:"3", lab:"to Other"},
-                                      ].filter(t=>t.id!==company).map(t=>(
-                                        <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
-                                          className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
-                                          {t.lab}
-                                        </button>
-                                      ))
+                  {/* List */}
+                  <section className="bg-blue-50 rounded-2xl border border-blue-200 shadow-sm overflow-visible">
+                    <table className="w-full text-sm">
+                      <thead className="bg-blue-100">
+                        <tr className="text-blue-900">
+                          <th className="text-left px-4 py-3">Name</th>
+                          {!isDeletedSub && <th className="text-left px-4 py-3">Plan</th>}
+                          {!isDeletedSub && <th className="text-left px-4 py-3">Renewal date</th>}
+                          {!isDeletedSub && <th className="text-left px-4 py-3">Days left</th>}
+                          <th className="text-left px-4 py-3">Business</th>
+                          <th className="text-left px-4 py-3">Actions</th>
+                          <th className="text-left px-4 py-3">Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length===0 && (
+                          <tr><td colSpan={7} className="px-4 py-8 text-center text-blue-900/60">No users</td></tr>
+                        )}
+                        {filtered.map(u=>{
+                          const days=diffInDays(endOfTodayISO(), u.renewalISO);
+                          const renewalStr=localDateStrFromISO(u.renewalISO);
+                          const color = days<0 ? "text-red-600" : days<=3 ? "text-amber-600" : "text-emerald-700";
+                          const rmKey='remove:'+u.id, paidKey='paid:'+u.id, trKey='transfer:'+u.id;
+                          const noteShort = (u.note||'').length>80 ? (u.note.slice(0,80)+'…') : (u.note||'');
+                          return (
+                            <tr key={u.id} className="border-t border-blue-200 bg-white">
+                              <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
+                              {!isDeletedSub && <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>}
+                              {!isDeletedSub && <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>}
+                              {!isDeletedSub && <td className={`px-4 py-3 font-semibold ${color}`}>{isFinite(days)?days:'-'}</td>}
+                              <td className="px-4 py-3">
+                                <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
+                              </td>
+
+                              {/* ACTIONS */}
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-1">
+                                  {/* Mark paid (anche in Deleted Sub lasciamo disattivato) */}
+                                  <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey || isDeletedSub}
+                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${(busyBtn===paidKey||isDeletedSub)?'bg-emerald-400/50 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>
+                                    <IconCheck className="w-5 h-5" />
+                                  </button>
+
+                                  {/* Edit (con Cancel Sub) */}
+                                  <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
+                                    className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90">
+                                    <IconPencil className="w-5 h-5" />
+                                  </button>
+
+                                  {/* Transfer - include Deleted Sub */}
+                                  <div className="relative">
+                                    <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)} disabled={busyBtn===trKey}
+                                      className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-500 text-white hover:opacity-90">
+                                      <IconArrows className="w-5 h-5" />
+                                    </button>
+                                    {transferFor===u.id && (
+                                      <div className="absolute right-0 top-full translate-y-1 z-50 bg-white border border-blue-200 rounded-lg shadow px-2 py-2 w-44">
+                                        {busyBtn===trKey ? (
+                                          <div className="px-3 py-1.5 text-blue-900/70">Moving…</div>
+                                        ) : (
+                                          [
+                                            {id:"1", lab:"to Hidden"},
+                                            {id:"2", lab:"to Sara"},
+                                            {id:"4", lab:"to Deleted Sub"},
+                                            {id:"3", lab:"to Other"},
+                                          ].filter(t=>t.id!==company).map(t=>(
+                                            <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
+                                              className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
+                                              {t.lab}
+                                            </button>
+                                          ))
+                                        )}
+                                      </div>
                                     )}
                                   </div>
-                                )}
-                              </div>
-                              <button title="Delete" onClick={()=>removeUserLocal(u.id)} disabled={busyBtn===rmKey}
-                                className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===rmKey?'bg-red-400':'bg-red-600 hover:opacity-90'}`}>
-                                <IconTrash className="w-5 h-5" />
-                              </button>
-                            </div>
-                          </td>
 
-                          {/* NOTE (ultima) */}
-                          <td className="px-4 py-3 text-blue-900/80">{noteShort}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </section>
+                                  {/* Delete */}
+                                  <button title="Delete" onClick={()=>removeUserLocal(u.id)} disabled={busyBtn===rmKey}
+                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===rmKey?'bg-red-400':'bg-red-600 hover:opacity-90'}`}>
+                                    <IconTrash className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              </td>
+
+                              {/* NOTE */}
+                              <td className="px-4 py-3 text-blue-900/80">{noteShort}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </section>
+                </>
+              )}
+
+              {showForm && (
+                <UserForm
+                  defaultValues={editUser||undefined}
+                  onClose={()=>{ setShowForm(false); setEditUser(null); }}
+                  onSave={async (payload, cancelSub)=>{ 
+                    if(editUser) await updateUserLocal({ ...editUser, ...payload }, { cancelSub }); 
+                    else await addUserLocal(payload); 
+                    setShowForm(false); setEditUser(null); 
+                  }}
+                  saving={busyBtn==='add' || busyBtn==='edit'}
+                />
+              )}
+
+              {detailUser && (
+                <DetailModal user={detailUser} onClose={()=> setDetailUser(null)} />
+              )}
             </main>
-
-            {showForm && (
-              <UserForm
-                defaultValues={editUser||undefined}
-                onClose={()=>{ setShowForm(false); setEditUser(null); }}
-                onSave={async (payload)=>{ if(editUser) await updateUserLocal({ ...editUser, ...payload }); else await addUserLocal(payload); setShowForm(false); setEditUser(null); }}
-                saving={busyBtn==='add' || busyBtn==='edit'}
-              />
-            )}
-
-            {detailUser && (
-              <DetailModal user={detailUser} onClose={()=> setDetailUser(null)} />
-            )}
           </div>
         );
       }
@@ -394,6 +503,8 @@
         const [note,setNote]=useState(defaultValues?.note||"");
         const [status_invoice,setStatus]=useState(defaultValues?.status_invoice||"");
         const [business,setBusiness]=useState(!!defaultValues?.business);
+        // Cancel Sub tick (solo in Edit)
+        const [cancelSub, setCancelSub] = useState(false);
 
         useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
 
@@ -412,7 +523,7 @@
             plan, renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
             country, vat_id, note, status_invoice, business
-          });
+          }, cancelSub);
         }
 
         const datePattern="(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
@@ -485,6 +596,13 @@
                       <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
                       <span className="text-blue-900/90">Business</span>
                     </label>
+
+                    {isEdit && (
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" className="w-5 h-5" checked={cancelSub} onChange={e=>setCancelSub(e.target.checked)} />
+                        <span className="text-red-700 font-medium">Cancel sub (move to Deleted Sub)</span>
+                      </label>
+                    )}
 
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
@@ -564,12 +682,66 @@
         );
       }
 
-      function ReadRow({ label, value }){
+      function ReadRow({ label, value }){ return (
+        <div className="grid gap-1">
+          <span className="text-sm text-blue-900/90">{label}</span>
+          <input className="px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" value={value} readOnly />
+        </div>
+      );}
+
+      /* ====== REVENUE VIEW ====== */
+      function RevenueView({ data, onReload }){
         return (
-          <div className="grid gap-1">
-            <span className="text-sm text-blue-900/90">{label}</span>
-            <input className="px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" value={value} readOnly />
-          </div>
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="text-xl font-semibold text-blue-900">Revenue</h2>
+              <button className="ml-auto px-3 py-1.5 rounded-lg bg-blue-700 text-white" onClick={onReload}>Reload</button>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-3">
+              <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
+                <div className="text-sm text-blue-900/70">Hidden €</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.hidden)}</div>
+              </div>
+              <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
+                <div className="text-sm text-blue-900/70">Sara €</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.sara)}</div>
+              </div>
+              <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
+                <div className="text-sm text-blue-900/70">Total €</div>
+                <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.total)}</div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-2xl border border-blue-200 shadow overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-blue-100">
+                  <tr className="text-blue-900">
+                    <th className="text-left px-4 py-3">Timestamp</th>
+                    <th className="text-left px-4 py-3">Company</th>
+                    <th className="text-left px-4 py-3">User</th>
+                    <th className="text-right px-4 py-3">Amount (€)</th>
+                    <th className="text-left px-4 py-3">Plan</th>
+                    <th className="text-left px-4 py-3">Renewal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.isArray(data.items) && data.items.length>0 ? data.items.slice().reverse().map((it,idx)=>(
+                    <tr key={idx} className="border-t border-blue-200 bg-white">
+                      <td className="px-4 py-3 text-blue-900/80">{it.timestamp_iso || ''}</td>
+                      <td className="px-4 py-3 text-blue-900/80">{it.company_id==='1'?'Hidden':it.company_id==='2'?'Sara':it.company_id==='4'?'Deleted Sub':it.company_id==='3'?'Other':'-'}</td>
+                      <td className="px-4 py-3 text-blue-900/90">{it.name || ''}</td>
+                      <td className="px-4 py-3 text-blue-900/90 text-right">{eur(it.amount_eur)}</td>
+                      <td className="px-4 py-3 text-blue-900/80">{it.plan || ''}</td>
+                      <td className="px-4 py-3 text-blue-900/80">{localDateStrFromISO(it.renewal_iso)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         );
       }
 
@@ -578,4 +750,5 @@
     </script>
   </body>
 </html>
+
 
