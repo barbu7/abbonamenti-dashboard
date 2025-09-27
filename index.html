@@ -301,6 +301,8 @@
 
         if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
         const isDeletedSub = state.company === '4';
+        const isOther = state.company === '3';
+        const columnsCount = isOther ? 3 : (isDeletedSub ? 4 : 7);
 
         return (
           <div className="min-h-screen">
@@ -423,18 +425,20 @@
                       <thead className="bg-blue-100">
                         <tr className="text-blue-900">
                           <th className="text-left px-4 py-3">Name</th>
-                          {state.company!=='4' && <th className="text-left px-4 py-3">Plan</th>}
-                          {state.company!=='4' && <th className="text-left px-4 py-3">Renewal date</th>}
-                          {state.company!=='4' && <th className="text-left px-4 py-3">Days left</th>}
-                          <th className="text-left px-4 py-3">Business</th>
+
+                          {/* Hidden/Sara: full; Deleted Sub: partial; Other: only Actions & Note besides Name */}
+                          {!isOther && state.company!=='4' && <th className="text-left px-4 py-3">Plan</th>}
+                          {!isOther && state.company!=='4' && <th className="text-left px-4 py-3">Renewal date</th>}
+                          {!isOther && state.company!=='4' && <th className="text-left px-4 py-3">Days left</th>}
+                          
+                          {!isOther && <th className="text-left px-4 py-3">Business</th>}
                           <th className="text-left px-4 py-3">Actions</th>
                           <th className="text-left px-4 py-3">Note</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {/* ... (lista utenti invariata) ... */}
                         {filtered.length===0 && (
-                          <tr><td colSpan={7} className="px-4 py-8 text-center text-blue-900/60">No users</td></tr>
+                          <tr><td colSpan={columnsCount} className="px-4 py-8 text-center text-blue-900/60">No users</td></tr>
                         )}
                         {filtered.map(u=>{
                           const days=diffInDays(endOfTodayISO(), u.renewalISO);
@@ -445,23 +449,39 @@
                           return (
                             <tr key={u.id} className="border-t border-blue-200 bg-white">
                               <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
-                              {state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>}
-                              {state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>}
-                              {state.company!=='4' && <td className={`px-4 py-3 font-semibold ${color}`}>{isFinite(days)?days:'-'}</td>}
-                              <td className="px-4 py-3">
-                                <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
-                              </td>
+
+                              {/* Hidden/Sara columns (skip for Other and Deleted Sub where appropriate) */}
+                              {!isOther && state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>}
+                              {!isOther && state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>}
+                              {!isOther && state.company!=='4' && <td className={`px-4 py-3 font-semibold ${color}`}>{isFinite(days)?days:'-'}</td>}
+
+                              {!isOther && (
+                                <td className="px-4 py-3">
+                                  <span className={`inline-block w-3 h-3 rounded-full ${u.business?'bg-emerald-500':'bg-red-500'}`} title={u.business ? 'Yes' : 'No'}></span>
+                                </td>
+                              )}
 
                               <td className="px-4 py-2">
                                 <div className="flex items-center gap-1">
-                                  <button title="Mark paid" onClick={()=>markPaidLocal(u)} disabled={busyBtn===paidKey || state.company==='4'}
-                                    className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${(busyBtn===paidKey||state.company==='4')?'bg-emerald-400 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>
-                                    <IconCheck className="w-5 h-5" />
-                                  </button>
+                                  {/* Mark paid: visibile ovunque tranne in Deleted Sub e (NUOVO) in Other */}
+                                  {(!isOther && state.company!=='4') && (
+                                    <button
+                                      title="Mark paid"
+                                      onClick={()=>markPaidLocal(u)}
+                                      disabled={busyBtn===paidKey}
+                                      className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===paidKey?'bg-emerald-400 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}
+                                    >
+                                      <IconCheck className="w-5 h-5" />
+                                    </button>
+                                  )}
+
+                                  {/* Edit */}
                                   <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
                                     className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90">
                                     <IconPencil className="w-5 h-5" />
                                   </button>
+
+                                  {/* Transfer */}
                                   <div className="relative">
                                     <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)} disabled={busyBtn===trKey}
                                       className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-500 text-white hover:opacity-90">
@@ -487,6 +507,8 @@
                                       </div>
                                     )}
                                   </div>
+
+                                  {/* Delete */}
                                   <button title="Delete" onClick={()=>removeUserLocal(u.id)} disabled={busyBtn===rmKey}
                                     className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===rmKey?'bg-red-400':'bg-red-600 hover:opacity-90'}`}>
                                     <IconTrash className="w-5 h-5" />
@@ -734,10 +756,9 @@
         const [sara, setSara] = useState(0);
         const [total, setTotal] = useState(0);
         const [q, setQ] = useState("");
-      
-        // Busy state for reset/delete
-        const [revBusy, setRevBusy] = useState(null); // null | 'reset' | `delete:${row_index}`
-      
+
+        const [revBusy, setRevBusy] = useState(null);
+
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
           setItems(safeItems);
@@ -745,11 +766,11 @@
           setSara(Number(data.sara||0));
           setTotal(Number(data.total||0));
         }, [data.ok, data.hidden, data.sara, data.total, JSON.stringify(data.items||[])]);
-      
+
         function companyLabel(cid){
           return cid==='1'?'Hidden':cid==='2'?'Sara':cid==='4'?'Deleted Sub':cid==='3'?'Other':'-';
         }
-      
+
         async function onResetTotals(){
           if (revBusy) return;
           if (!confirm("Reset: eliminare TUTTE le righe in Payments e azzerare i totali?")) return;
@@ -762,7 +783,7 @@
             setRevBusy(null);
           }
         }
-      
+
         async function onDeleteRow(row_index){
           if (revBusy) return;
           if (!row_index) return;
@@ -776,15 +797,15 @@
             setRevBusy(null);
           }
         }
-      
+
         const filtered = useMemo(()=>{
           const t = q.trim().toLowerCase();
           if (!t) return items;
           return items.filter(it => String(it.name||"").toLowerCase().includes(t));
         }, [items, q]);
-      
+
         const viewItems = filtered.slice().reverse();
-      
+
         return (
           <section className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -803,8 +824,7 @@
               >
                 {revBusy === 'reset' ? 'Resetting…' : 'Reset'}
               </button>
-      
-              {/* Search by name with clear */}
+
               <div className="ml-auto flex items-center gap-2">
                 <div className="relative">
                   <input
@@ -820,9 +840,7 @@
                       aria-label="Clear search"
                       onClick={()=>setQ("")}
                       disabled={!!revBusy}
-                      className={`absolute right-2 top-1/2 -translate-y-1/2 ${
-                        revBusy ? 'text-blue-400 cursor-not-allowed' : 'text-blue-700 hover:opacity-80'
-                      }`}
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 ${revBusy ? 'text-blue-400 cursor-not-allowed' : 'text-blue-700 hover:opacity-80'}`}
                       title="Clear"
                     >
                       ✕
@@ -831,7 +849,7 @@
                 </div>
               </div>
             </div>
-      
+
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Hidden €</div>
@@ -846,7 +864,7 @@
                 <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.total)}</div>
               </div>
             </div>
-      
+
             <div className="bg-blue-50 rounded-2xl border border-blue-200 shadow overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-blue-100">
@@ -901,9 +919,9 @@
         );
       }
 
-
       const root=ReactDOM.createRoot(document.getElementById("root"));
       root.render(<App />);
     </script>
   </body>
 </html>
+
