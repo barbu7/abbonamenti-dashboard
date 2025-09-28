@@ -96,7 +96,7 @@
               id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso,
               discord_id:u.discord_id, user_key:u.user_key, latest_paid_iso:u.latest_paid_iso,
               stripe_customer_id:u.stripe_customer_id, country:u.country, vat_id:u.vat_id,
-              note:u.note, status_invoice:u.status_invoice, business:!!u.business
+              note:u.note, business:!!u.business
             });
           });
           return companies;
@@ -208,14 +208,14 @@
               discord_id:user.discord_id||'', user_key:user.user_key||'',
               latest_paid_iso:user.latest_paid_iso||'', stripe_customer_id:user.stripe_customer_id||'',
               country:user.country||'', vat_id:user.vat_id||'', note:user.note||'',
-              status_invoice:user.status_invoice||'', business:!!user.business
+              business:!!user.business
             });
             const u=res.user;
             updateCompanyUsers(arr=>{
               arr.push({ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso,
                 discord_id:u.discord_id, user_key:u.user_key, latest_paid_iso:u.latest_paid_iso,
                 stripe_customer_id:u.stripe_customer_id, country:u.country, vat_id:u.vat_id,
-                note:u.note, status_invoice:u.status_invoice, business:!!u.business });
+                note:u.note, business:!!u.business });
             });
           } finally { setBusyBtn(null); }
         }
@@ -238,7 +238,7 @@
             const payload={ action:'update', id:user.id, company_id: company, name:user.name, plan:user.plan };
             const manualISO=isoFromLocalDateStr(user.renewalLocal||"");
             if(manualISO) payload.renewal_iso=manualISO;
-            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','status_invoice','business']
+            ['discord_id','user_key','latest_paid_iso','stripe_customer_id','country','vat_id','note','business']
               .forEach(k=>{ if(user[k]!==undefined) payload[k]=k==='business' ? !!user[k] : user[k]; });
             const res=await apiAction(payload);
             const u=res.user || { ...user, renewal_iso: manualISO || user.renewalISO };
@@ -247,7 +247,7 @@
               if(i>=0) arr[i]={ id:u.id, name:u.name, plan:u.plan, renewalISO:u.renewal_iso||arr[i].renewalISO,
                 discord_id:u.discord_id, user_key:u.user_key, latest_paid_iso:u.latest_paid_iso,
                 stripe_customer_id:u.stripe_customer_id, country:u.country, vat_id:u.vat_id,
-                note:u.note, status_invoice:u.status_invoice, business:!!u.business };
+                note:u.note, business:!!u.business };
             });
           } finally { setBusyBtn(null); }
         }
