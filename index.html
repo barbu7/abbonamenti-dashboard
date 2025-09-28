@@ -76,6 +76,7 @@
         const [detailUser,setDetailUser]= React.useState(null);
         const [transferFor,setTransferFor]= React.useState(null);
         const [view,setView]= React.useState("list"); // "list" | "revenue"
+        const [markPaidFor, setMarkPaidFor] = React.useState(null); // NEW modal
         const pollRef = React.useRef(null);
 
         // counters
@@ -263,17 +264,13 @@
           } finally { setBusyBtn(null); }
         }
 
-        async function markPaidLocal(u){
-          try{
-            setBusyBtn('paid:'+u.id);
-            const amount = prompt("Importo ricevuto (€):", "");
-            const res=await apiAction({ action:'mark_paid', id:u.id, amount_eur: amount });
-            const nu=res.user;
-            updateCompanyUsers(arr=>{
-              const i=arr.findIndex(x=>x.id===u.id);
-              if(i>=0) arr[i]={ ...arr[i], renewalISO: nu.renewal_iso, latest_paid_iso: nu.latest_paid_iso };
-            });
-          } finally { setBusyBtn(null); }
+        // NEW: Mark Paid modal open/save
+        function openMarkPaid(u){ setMarkPaidFor(u); }
+        function onMarkPaidSaved(updatedUser){
+          updateCompanyUsers(arr=>{
+            const i=arr.findIndex(x=>x.id===updatedUser.id);
+            if(i>=0) arr[i]={ ...arr[i], renewalISO: updatedUser.renewal_iso, latest_paid_iso: updatedUser.latest_paid_iso };
+          });
         }
 
         async function transferUserLocal(u, target){
@@ -300,10 +297,11 @@
         const usersIndex = useMemo(()=>buildUsersIndex(state.companies), [state.companies]);
 
         if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
+
         const isDeletedSub = state.company === '4';
         const isOther = state.company === '3';
         const columnsCount = isOther ? 3 : (isDeletedSub ? 4 : 7);
-
+        
         return (
           <div className="min-h-screen">
             <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
@@ -353,9 +351,7 @@
               ) : (
                 <>
                   <section className="mb-6 flex flex-wrap items-center gap-2">
-                    {/* Left: search + sort */}
                     <div className="flex flex-wrap items-center gap-2 grow">
-                      {/* Search with clear (✕) */}
                       <div className="relative">
                         <input
                           className="w-64 px-3 pr-8 py-2 border border-blue-200 rounded-xl outline-none focus:ring bg-white"
@@ -375,7 +371,7 @@
                           </button>
                         )}
                       </div>
-                  
+
                       <label className="text-sm text-blue-900/80">Sort by:</label>
                       <select
                         className="px-2 py-2 border border-blue-200 rounded-xl bg-white"
@@ -385,7 +381,7 @@
                         <option value="renewal">Renewal date</option>
                         <option value="name">Name</option>
                       </select>
-                  
+
                       <select
                         className="px-2 py-2 border border-blue-200 rounded-xl bg-white"
                         value={sortDir}
@@ -395,8 +391,7 @@
                         <option value="desc">Desc</option>
                       </select>
                     </div>
-                  
-                    {/* Right: add + counter */}
+
                     <div className="flex items-center gap-3 shrink-0">
                       <button
                         onClick={()=>{ setEditUser(null); setShowForm(true); }}
@@ -404,7 +399,7 @@
                       >
                         {busyBtn==='add' ? 'Saving…' : '➕ Add user'}
                       </button>
-                  
+
                       {state.company === '1' && (
                         <span className="inline-flex items-center h-9 whitespace-nowrap text-sm text-blue-900/80 bg-white/70 rounded-full px-3 border border-blue-300">
                           User count: <b className="ml-1">{countHidden}</b>
@@ -418,19 +413,15 @@
                     </div>
                   </section>
 
-                  
                   {/* List */}
                   <section className="bg-blue-50 rounded-2xl border border-blue-200 shadow-sm overflow-visible">
                     <table className="w-full text-sm">
                       <thead className="bg-blue-100">
                         <tr className="text-blue-900">
                           <th className="text-left px-4 py-3">Name</th>
-
-                          {/* Hidden/Sara: full; Deleted Sub: partial; Other: only Actions & Note besides Name */}
                           {!isOther && state.company!=='4' && <th className="text-left px-4 py-3">Plan</th>}
                           {!isOther && state.company!=='4' && <th className="text-left px-4 py-3">Renewal date</th>}
                           {!isOther && state.company!=='4' && <th className="text-left px-4 py-3">Days left</th>}
-                          
                           {!isOther && <th className="text-left px-4 py-3">Business</th>}
                           <th className="text-left px-4 py-3">Actions</th>
                           <th className="text-left px-4 py-3">Note</th>
@@ -444,13 +435,12 @@
                           const days=diffInDays(endOfTodayISO(), u.renewalISO);
                           const renewalStr=localDateStrFromISO(u.renewalISO);
                           const color = days<0 ? "text-red-600" : days<=3 ? "text-amber-600" : "text-emerald-700";
-                          const rmKey='remove:'+u.id, paidKey='paid:'+u.id, trKey='transfer:'+u.id;
+                          const rmKey='remove:'+u.id;
                           const noteShort = (u.note||'').length>80 ? (u.note.slice(0,80)+'…') : (u.note||'');
                           return (
                             <tr key={u.id} className="border-t border-blue-200 bg-white">
                               <td className="px-4 py-3 font-medium text-blue-700 underline cursor-pointer" onClick={()=>setDetailUser(u)}>{u.name}</td>
 
-                              {/* Hidden/Sara columns (skip for Other and Deleted Sub where appropriate) */}
                               {!isOther && state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{planLabel(u.plan)}</td>}
                               {!isOther && state.company!=='4' && <td className="px-4 py-3 text-blue-900/90">{renewalStr}</td>}
                               {!isOther && state.company!=='4' && <td className={`px-4 py-3 font-semibold ${color}`}>{isFinite(days)?days:'-'}</td>}
@@ -463,52 +453,43 @@
 
                               <td className="px-4 py-2">
                                 <div className="flex items-center gap-1">
-                                  {/* Mark paid: visibile ovunque tranne in Deleted Sub e (NUOVO) in Other */}
                                   {(!isOther && state.company!=='4') && (
                                     <button
                                       title="Mark paid"
-                                      onClick={()=>markPaidLocal(u)}
-                                      disabled={busyBtn===paidKey}
-                                      className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===paidKey?'bg-emerald-400 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}
+                                      onClick={()=>openMarkPaid(u)}
+                                      className="inline-grid place-items-center w-8 h-8 rounded-md text-white bg-emerald-600 hover:opacity-90"
                                     >
                                       <IconCheck className="w-5 h-5" />
                                     </button>
                                   )}
 
-                                  {/* Edit */}
                                   <button title="Edit" onClick={()=>{ setEditUser(u); setShowForm(true); }}
                                     className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90">
                                     <IconPencil className="w-5 h-5" />
                                   </button>
 
-                                  {/* Transfer */}
                                   <div className="relative">
-                                    <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)} disabled={busyBtn===trKey}
+                                    <button title="Transfer" onClick={()=> setTransferFor(transferFor===u.id?null:u.id)}
                                       className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-500 text-white hover:opacity-90">
                                       <IconArrows className="w-5 h-5" />
                                     </button>
                                     {transferFor===u.id && (
                                       <div className="absolute right-0 top-full translate-y-1 z-50 bg-white border border-blue-200 rounded-lg shadow px-2 py-2 w-44">
-                                        {busyBtn===trKey ? (
-                                          <div className="px-3 py-1.5 text-blue-900/70">Moving…</div>
-                                        ) : (
-                                          [
-                                            {id:"1", lab:"to Hidden"},
-                                            {id:"2", lab:"to Sara"},
-                                            {id:"4", lab:"to Deleted Sub"},
-                                            {id:"3", lab:"to Other"},
-                                          ].filter(t=>t.id!==state.company).map(t=>(
-                                            <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
-                                              className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
-                                              {t.lab}
-                                            </button>
-                                          ))
-                                        )}
+                                        {[
+                                          {id:"1", lab:"to Hidden"},
+                                          {id:"2", lab:"to Sara"},
+                                          {id:"4", lab:"to Deleted Sub"},
+                                          {id:"3", lab:"to Other"},
+                                        ].filter(t=>t.id!==state.company).map(t=>(
+                                          <button key={t.id} onClick={()=>transferUserLocal(u, t.id)}
+                                            className="block text-left w-full px-3 py-1.5 rounded hover:bg-blue-50">
+                                            {t.lab}
+                                          </button>
+                                        ))}
                                       </div>
                                     )}
                                   </div>
 
-                                  {/* Delete */}
                                   <button title="Delete" onClick={()=>removeUserLocal(u.id)} disabled={busyBtn===rmKey}
                                     className={`inline-grid place-items-center w-8 h-8 rounded-md text-white ${busyBtn===rmKey?'bg-red-400':'bg-red-600 hover:opacity-90'}`}>
                                     <IconTrash className="w-5 h-5" />
@@ -535,12 +516,19 @@
                     else await addUserLocal(payload); 
                     setShowForm(false); setEditUser(null); 
                   }}
-                  saving={busyBtn==='add' || busyBtn==='edit'}
                 />
               )}
 
               {detailUser && (
                 <DetailModal user={detailUser} onClose={()=> setDetailUser(null)} />
+              )}
+
+              {markPaidFor && (
+                <MarkPaidModal
+                  user={markPaidFor}
+                  onClose={()=> setMarkPaidFor(null)}
+                  onSaved={(nu)=>{ onMarkPaidSaved(nu); setMarkPaidFor(null); loadRevenue(); }}
+                />
               )}
             </main>
           </div>
@@ -548,7 +536,7 @@
       }
 
       /* ====== FORM ====== */
-      function UserForm({ onClose, onSave, defaultValues, saving }){
+      function UserForm({ onClose, onSave, defaultValues }){
         const isEdit = !!defaultValues;
         const [name,setName]=useState(defaultValues?.name||"");
         const [plan,setPlan]=useState(defaultValues?.plan||"2m");
@@ -564,7 +552,6 @@
         const [note,setNote]=useState(defaultValues?.note||"");
         const [status_invoice,setStatus]=useState(defaultValues?.status_invoice||"");
         const [business,setBusiness]=useState(!!defaultValues?.business);
-        const [cancelSub, setCancelSub] = useState(false);
 
         useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
 
@@ -583,7 +570,7 @@
             plan, renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
             country, vat_id, note, status_invoice, business
-          }, cancelSub);
+          });
         }
 
         const datePattern="(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
@@ -593,88 +580,79 @@
             <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-blue-200 max-h-[85vh] overflow-y-auto">
               <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between sticky top-0">
                 <h2 className="text-lg font-semibold text-blue-900">{isEdit ? "Edit user" : "Add user"}</h2>
-                <button className="text-blue-700" onClick={onClose} disabled={!!saving}>✕</button>
+                <button className="text-blue-700" onClick={onClose}>✕</button>
               </div>
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
-                <fieldset disabled={!!saving} className={saving?"opacity-60":""}>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Name</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={name} onChange={e=>setName(e.target.value)} required />
-                    </label>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Name</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={name} onChange={e=>setName(e.target.value)} required />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Plan</span>
-                      <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={plan} onChange={e=>setPlan(e.target.value)}>
-                        <option value="2m">2 months</option>
-                        <option value="6m">6 months</option>
-                        <option value="1y">1 year</option>
-                      </select>
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Plan</span>
+                    <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={plan} onChange={e=>setPlan(e.target.value)}>
+                      <option value="2m">2 months</option>
+                      <option value="6m">6 months</option>
+                      <option value="1y">1 year</option>
+                    </select>
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Discord ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={discord_id} onChange={e=>setDiscord(e.target.value)} />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Discord ID</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={discord_id} onChange={e=>setDiscord(e.target.value)} />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">User Key</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={user_key} onChange={e=>setUserKey(e.target.value)} />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">User Key</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={user_key} onChange={e=>setUserKey(e.target.value)} />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Renewal date</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={renewalLocal} onChange={e=>setRenewalLocal(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Renewal date</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={renewalLocal} onChange={e=>setRenewalLocal(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Latest paid</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={latest_paid_iso_str} onChange={e=>setLatestPaid(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Latest paid</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={latest_paid_iso_str} onChange={e=>setLatestPaid(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                      <input type="url" className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={stripe_customer_id} onChange={e=>setStripe(e.target.value)} />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
+                    <input type="url" className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={stripe_customer_id} onChange={e=>setStripe(e.target.value)} />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">Country</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={country} onChange={e=>setCountry(e.target.value)} />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">Country</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={country} onChange={e=>setCountry(e.target.value)} />
+                  </label>
 
-                    <label className="grid gap-1">
-                      <span className="text-sm text-blue-900/90">VAT ID</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
-                    </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm text-blue-900/90">VAT ID</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
+                  </label>
 
-                    <label className="grid gap-2">
-                      <span className="text-sm text-blue-900/90">Invoice status</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
-                    </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-blue-900/90">Invoice status</span>
+                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
+                  </label>
 
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
-                      <span className="text-blue-900/90">Business</span>
-                    </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
+                    <span className="text-blue-900/90">Business</span>
+                  </label>
 
-                    {isEdit && (
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" className="w-5 h-5" checked={cancelSub} onChange={e=>setCancelSub(e.target.checked)} />
-                        <span className="text-red-700 font-medium">Cancel sub (move to Deleted Sub)</span>
-                      </label>
-                    )}
+                  <label className="grid gap-1 sm:col-span-2">
+                    <span className="text-sm text-blue-900/90">Note</span>
+                    <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
+                  </label>
+                </div>
 
-                    <label className="grid gap-1 sm:col-span-2">
-                      <span className="text-sm text-blue-900/90">Note</span>
-                      <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
-                    </label>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 mt-2">
-                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
-                    <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">{saving ? "Saving…" : "Save"}</button>
-                  </div>
-                </fieldset>
+                <div className="flex items-center justify-end gap-2 mt-2">
+                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
+                  <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">Save</button>
+                </div>
               </form>
             </div>
           </div>
@@ -749,23 +727,96 @@
         </div>
       );}
 
+      /* ====== MARK PAID MODAL ====== */
+      function MarkPaidModal({ user, onClose, onSaved }){
+        const [latestPaid, setLatestPaid] = useState("");
+        const [nextRenewal, setNextRenewal] = useState("");
+        const [amount, setAmount] = useState("");
+        const [saving, setSaving] = useState(false);
+
+        const prevLatest = user.latest_paid_iso ? localDateStrFromISO(user.latest_paid_iso) : "";
+        const prevNext   = user.renewalISO ? localDateStrFromISO(user.renewalISO) : "";
+
+        const datePattern = "(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
+
+        async function onSubmit(e){
+          e.preventDefault();
+          if (saving) return;
+          const lp = parseLocalDateStr(latestPaid);
+          const nr = parseLocalDateStr(nextRenewal);
+          if (!lp || !nr) { alert("Inserisci date valide (dd/mm/yyyy)"); return; }
+          if (!amount || isNaN(Number(amount))) { alert("Inserisci un importo valido"); return; }
+          try{
+            setSaving(true);
+            const res = await apiAction({
+              action: 'mark_paid',
+              id: user.id,
+              latest_paid_iso: lp.toISOString(),
+              renewal_iso: nr.toISOString(),
+              amount_eur: String(amount)
+            });
+            if (res.error){ alert(res.error); return; }
+            if (res.user) onSaved(res.user);
+          } finally {
+            setSaving(false);
+          }
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+            <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl border border-blue-200">
+              <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-blue-900">Mark paid — {user.name}</h2>
+                <button className="text-blue-700" onClick={onClose} disabled={saving}>✕</button>
+              </div>
+              <form onSubmit={onSubmit} className="px-6 py-5 grid gap-4">
+                <fieldset disabled={saving} className={saving?"opacity-60":""}>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Previous latest paid</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" value={prevLatest} readOnly />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Previous next renewal</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-gray-50" value={prevNext} readOnly />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Latest paid (new)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={latestPaid} onChange={e=>setLatestPaid(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Next renewal (new)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={nextRenewal} onChange={e=>setNextRenewal(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
+                    </label>
+
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Amount (€)</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" inputMode="decimal" required />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 mt-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
+                    <button type="submit" className={`px-4 py-2 rounded-xl text-white ${saving? 'bg-emerald-400 cursor-not-allowed':'bg-emerald-600 hover:opacity-90'}`}>{saving? 'Saving…' : 'Save'}</button>
+                  </div>
+                </fieldset>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
       /* ====== REVENUE VIEW ====== */
       function RevenueView({ data, onReload, usersIndex }){
         const [items, setItems] = useState([]);
-        const [hidden, setHidden] = useState(0);
-        const [sara, setSara] = useState(0);
-        const [total, setTotal] = useState(0);
         const [q, setQ] = useState("");
-
         const [revBusy, setRevBusy] = useState(null);
 
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
           setItems(safeItems);
-          setHidden(Number(data.hidden||0));
-          setSara(Number(data.sara||0));
-          setTotal(Number(data.total||0));
-        }, [data.ok, data.hidden, data.sara, data.total, JSON.stringify(data.items||[])]);
+        }, [data.ok, JSON.stringify(data.items||[])]);
 
         function companyLabel(cid){
           return cid==='1'?'Hidden':cid==='2'?'Sara':cid==='4'?'Deleted Sub':cid==='3'?'Other':'-';
@@ -875,8 +926,7 @@
                     <th className="text-left px-4 py-3">VAT ID</th>
                     <th className="text-left px-4 py-3">Country</th>
                     <th className="text-left px-4 py-3">Business</th>
-                    <th className="text-left px-4 py-3">Plan</th>
-                    <th className="text-left px-4 py-3">Renewal</th>
+                    <th className="text-left px-4 py-3">Renewal range</th>
                     <th className="text-left px-4 py-3">Delete</th>
                   </tr>
                 </thead>
@@ -893,8 +943,7 @@
                         <td className="px-4 py-3">
                           <span className={`inline-block w-3 h-3 rounded-full ${userInfo.business?'bg-emerald-500':'bg-red-500'}`} title={userInfo.business ? 'Yes' : 'No'}></span>
                         </td>
-                        <td className="px-4 py-3 text-blue-900/80">{it.plan || ''}</td>
-                        <td className="px-4 py-3 text-blue-900/80">{localDateStrFromISO(it.renewal_iso)}</td>
+                        <td className="px-4 py-3 text-blue-900/80">{it.renewal_range || localDateStrFromISO(it.renewal_iso)}</td>
                         <td className="px-4 py-2">
                           <button
                             title="Delete payment"
@@ -910,7 +959,7 @@
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan={9} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
                   )}
                 </tbody>
               </table>
@@ -924,4 +973,3 @@
     </script>
   </body>
 </html>
-
