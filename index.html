@@ -637,11 +637,6 @@
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
                     </label>
       
-                    <label className="grid gap-2">
-                      <span className="text-sm text-blue-900/90">Invoice status</span>
-                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
-                    </label>
-      
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
                       <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
@@ -854,6 +849,21 @@
           }
         }
       
+        async function onEditInvoiceNote(row_index, currentNote){
+          if (revBusy) return;
+          const note = prompt("Invoice note (puoi scrivere Yes/No o qualsiasi testo):", String(currentNote||""));
+          if (note === null) return; // annullato
+          try{
+            const key = `invnote:${row_index}`;
+            setRevBusy(key);
+            const res = await apiAction({ action: 'payments_set_invoice_note', row_index, note });
+            if (res.error){ alert(res.error); return; }
+            await onReload();
+          } finally {
+            setRevBusy(null);
+          }
+        }
+      
         const filtered = useMemo(()=>{
           const t = q.trim().toLowerCase();
           if (!t) return items;
@@ -939,9 +949,8 @@
                 <tbody>
                   {viewItems.length>0 ? viewItems.map((it,idx)=> {
                     const userInfo = usersIndex[it.user_id] || { vat_id:"", country:"", business:false };
-                    const inv = !!it.invoice_done;
-                    const key = `invoice:${it.row_index}`;
-                    const disabledToggle = String(revBusy)===key;
+                    const key = `invnote:${it.row_index}`;
+                    const disabledNote = String(revBusy)===key;
       
                     return (
                       <tr key={`${it.row_index}-${idx}`} className="border-top border-blue-200 bg-white">
@@ -955,33 +964,23 @@
                         </td>
                         <td className="px-4 py-3 text-blue-900/80">{it.renewal_range || localDateStrFromISO(it.renewal_iso)}</td>
       
-                        {/* Invoice toggle */}
+                        {/* Invoice note */}
                         <td className="px-4 py-3">
-                          <button
-                            onClick={async ()=>{
-                              if (disabledToggle) return;
-                              try{
-                                setRevBusy(key);
-                                const res = await apiAction({
-                                  action: 'payments_toggle_invoice',
-                                  row_index: it.row_index,
-                                  value: !inv
-                                });
-                                if (res.error){ alert(res.error); return; }
-                                await onReload();
-                              } finally {
-                                setRevBusy(null);
-                              }
-                            }}
-                            disabled={disabledToggle}
-                            className={`px-3 py-1 rounded-full text-white text-sm ${
-                              inv ? (disabledToggle ? 'bg-emerald-400' : 'bg-emerald-600 hover:opacity-90')
-                                  : (disabledToggle ? 'bg-gray-400'   : 'bg-gray-600 hover:opacity-90')
-                            }`}
-                            title={inv ? 'Invoice sent (click to unset)' : 'Invoice not sent (click to set)'}
-                          >
-                            {inv ? 'Yes' : 'No'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 rounded bg-white border border-blue-200 text-blue-900/90 max-w-[240px] truncate" title={it.invoice_note || '-'}>
+                              {it.invoice_note || '-'}
+                            </span>
+                            <button
+                              onClick={()=>onEditInvoiceNote(it.row_index, it.invoice_note)}
+                              disabled={disabledNote}
+                              className={`px-3 py-1 rounded-lg text-white text-sm ${
+                                disabledNote ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-700 hover:opacity-90'
+                              }`}
+                              title="Edit invoice note"
+                            >
+                              {disabledNote ? 'Saving…' : 'Edit'}
+                            </button>
+                          </div>
                         </td>
       
                         {/* Delete */}
