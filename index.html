@@ -568,7 +568,7 @@
       
         function handleSubmit(e){
           e.preventDefault();
-          if (saving) return; // evita doppio submit
+          if (saving) return;
       
           const dt=parseLocalDateStr(renewalLocal);
           if(!dt) return alert("Renewal date must be dd/mm/yyyy");
@@ -582,7 +582,8 @@
             name:name.trim()||"Unnamed",
             plan, renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
-            country, vat_id, note, business
+            country, vat_id, note,
+            business: !!business
           });
         }
       
@@ -647,6 +648,29 @@
                       <span className="text-sm text-blue-900/90">VAT ID</span>
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
                     </label>
+      
+                    {/* ===== Business toggle (Yes/No) ===== */}
+                    <div className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Business</span>
+                      <div className="inline-flex rounded-xl overflow-hidden border border-blue-200">
+                        <button
+                          type="button"
+                          className={`px-3 py-2 text-sm ${business ? 'bg-emerald-600 text-white' : 'bg-white text-blue-900/90'}`}
+                          onClick={()=>setBusiness(true)}
+                          aria-pressed={business}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          className={`px-3 py-2 text-sm ${!business ? 'bg-red-600 text-white' : 'bg-white text-blue-900/90'}`}
+                          onClick={()=>setBusiness(false)}
+                          aria-pressed={!business}
+                        >
+                          No
+                        </button>
+                      </div>
+                    </div>
       
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
