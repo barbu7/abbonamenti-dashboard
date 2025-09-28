@@ -813,9 +813,9 @@
         const [q, setQ] = useState("");
         const [revBusy, setRevBusy] = useState(null);
       
-        // Popup state per edit invoice note
-        const [noteModal, setNoteModal] = useState(null); 
-        // noteModal = { row_index, currentNote, saving: bool, value: string }
+        // Stato del modal per modificare la nota invoice
+        // { row_index, value, saving }
+        const [noteModal, setNoteModal] = useState(null);
       
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
@@ -856,8 +856,7 @@
         function openNoteModal(row_index, currentNote){
           setNoteModal({
             row_index,
-            currentNote: String(currentNote || ""),
-            value: String(currentNote || ""),
+            value: String(currentNote || ""), // di default vuoto
             saving: false
           });
         }
@@ -869,7 +868,7 @@
             const res = await apiAction({
               action: 'payments_set_invoice_note',
               row_index: noteModal.row_index,
-              note: noteModal.value // stringa: può essere "" (vuoto), "Yes", "No", testo libero
+              note: noteModal.value
             });
             if (res.error){
               alert(res.error);
