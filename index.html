@@ -813,6 +813,10 @@
         const [q, setQ] = useState("");
         const [revBusy, setRevBusy] = useState(null);
       
+        // Popup state per edit invoice note
+        const [noteModal, setNoteModal] = useState(null); 
+        // noteModal = { row_index, currentNote, saving: bool, value: string }
+      
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
           setItems(safeItems);
@@ -849,18 +853,34 @@
           }
         }
       
-        async function onEditInvoiceNote(row_index, currentNote){
-          if (revBusy) return;
-          const note = prompt("Invoice note (puoi scrivere Yes/No o qualsiasi testo):", String(currentNote||""));
-          if (note === null) return; // annullato
+        function openNoteModal(row_index, currentNote){
+          setNoteModal({
+            row_index,
+            currentNote: String(currentNote || ""),
+            value: String(currentNote || ""),
+            saving: false
+          });
+        }
+      
+        async function saveNoteModal(){
+          if (!noteModal || noteModal.saving) return;
           try{
-            const key = `invnote:${row_index}`;
-            setRevBusy(key);
-            const res = await apiAction({ action: 'payments_set_invoice_note', row_index, note });
-            if (res.error){ alert(res.error); return; }
+            setNoteModal(m=>({...m, saving:true}));
+            const res = await apiAction({
+              action: 'payments_set_invoice_note',
+              row_index: noteModal.row_index,
+              note: noteModal.value // stringa: può essere "" (vuoto), "Yes", "No", testo libero
+            });
+            if (res.error){
+              alert(res.error);
+              setNoteModal(m=>({...m, saving:false}));
+              return;
+            }
             await onReload();
-          } finally {
-            setRevBusy(null);
+            setNoteModal(null);
+          } catch(err){
+            alert(String(err));
+            setNoteModal(m=>({...m, saving:false}));
           }
         }
       
@@ -949,9 +969,6 @@
                 <tbody>
                   {viewItems.length>0 ? viewItems.map((it,idx)=> {
                     const userInfo = usersIndex[it.user_id] || { vat_id:"", country:"", business:false };
-                    const key = `invnote:${it.row_index}`;
-                    const disabledNote = String(revBusy)===key;
-      
                     return (
                       <tr key={`${it.row_index}-${idx}`} className="border-top border-blue-200 bg-white">
                         <td className="px-4 py-3 text-blue-900/80">{companyLabel(String(it.company_id||""))}</td>
@@ -964,21 +981,18 @@
                         </td>
                         <td className="px-4 py-3 text-blue-900/80">{it.renewal_range || localDateStrFromISO(it.renewal_iso)}</td>
       
-                        {/* Invoice note */}
+                        {/* Invoice note + edit icon */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-1 rounded bg-white border border-blue-200 text-blue-900/90 max-w-[240px] truncate" title={it.invoice_note || '-'}>
                               {it.invoice_note || '-'}
                             </span>
                             <button
-                              onClick={()=>onEditInvoiceNote(it.row_index, it.invoice_note)}
-                              disabled={disabledNote}
-                              className={`px-3 py-1 rounded-lg text-white text-sm ${
-                                disabledNote ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-700 hover:opacity-90'
-                              }`}
                               title="Edit invoice note"
+                              onClick={()=>openNoteModal(it.row_index, it.invoice_note)}
+                              className="inline-grid place-items-center w-8 h-8 rounded-md bg-blue-700 text-white hover:opacity-90"
                             >
-                              {disabledNote ? 'Saving…' : 'Edit'}
+                              <IconPencil className="w-5 h-5" />
                             </button>
                           </div>
                         </td>
@@ -1004,6 +1018,38 @@
                 </tbody>
               </table>
             </div>
+      
+            {/* ===== Modal Edit Invoice Note ===== */}
+            {noteModal && (
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+                <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl border border-blue-200 max-h-[85vh] overflow-y-auto">
+                  <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between sticky top-0">
+                    <h2 className="text-lg font-semibold text-blue-900">Edit invoice note</h2>
+                    <button className="text-blue-700" onClick={()=>!noteModal.saving && setNoteModal(null)} disabled={noteModal.saving}>✕</button>
+                  </div>
+                  <form onSubmit={(e)=>{ e.preventDefault(); if (!noteModal.saving) saveNoteModal(); }} className="px-6 py-5 grid gap-4">
+                    <fieldset disabled={noteModal.saving} className={noteModal.saving ? "opacity-60" : ""}>
+                      <label className="grid gap-1">
+                        <span className="text-sm text-blue-900/90">Invoice note</span>
+                        <textarea
+                          rows="4"
+                          className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                          value={noteModal.value}
+                          onChange={(e)=>setNoteModal(m=>({...m, value:e.target.value}))}
+                          placeholder="Scrivi Yes / No / testo libero…"
+                        />
+                      </label>
+                      <div className="flex items-center justify-end gap-2 mt-2">
+                        <button type="button" onClick={()=>setNoteModal(null)} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
+                        <button type="submit" disabled={noteModal.saving} className={`px-4 py-2 rounded-xl text-white ${noteModal.saving ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-700 hover:opacity-90'}`}>
+                          {noteModal.saving ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </fieldset>
+                  </form>
+                </div>
+              </div>
+            )}
           </section>
         );
       }
