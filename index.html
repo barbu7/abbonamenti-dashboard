@@ -516,6 +516,7 @@
                     else await addUserLocal(payload); 
                     setShowForm(false); setEditUser(null); 
                   }}
+                  saving={busyBtn==='add' || busyBtn==='edit'}
                 />
               )}
 
@@ -536,7 +537,7 @@
       }
 
       /* ====== FORM ====== */
-      function UserForm({ onClose, onSave, defaultValues }){
+      function UserForm({ onClose, onSave, defaultValues, saving = false }){
         const isEdit = !!defaultValues;
         const [name,setName]=useState(defaultValues?.name||"");
         const [plan,setPlan]=useState(defaultValues?.plan||"2m");
@@ -552,11 +553,13 @@
         const [note,setNote]=useState(defaultValues?.note||"");
         const [status_invoice,setStatus]=useState(defaultValues?.status_invoice||"");
         const [business,setBusiness]=useState(!!defaultValues?.business);
-
+      
         useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
-
+      
         function handleSubmit(e){
           e.preventDefault();
+          if (saving) return; // evita doppio submit
+      
           const dt=parseLocalDateStr(renewalLocal);
           if(!dt) return alert("Renewal date must be dd/mm/yyyy");
           let latestISO='';
@@ -572,87 +575,96 @@
             country, vat_id, note, status_invoice, business
           });
         }
-
+      
         const datePattern="(?:0?[1-9]|[12]\\d|3[01])\\/(?:0?[1-9]|1[0-2])\\/\\d{4}";
-
+      
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-2 sm:p-4">
             <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-blue-200 max-h-[85vh] overflow-y-auto">
               <div className="px-6 py-4 border-b border-blue-200 bg-blue-100 rounded-t-2xl flex items-center justify-between sticky top-0">
                 <h2 className="text-lg font-semibold text-blue-900">{isEdit ? "Edit user" : "Add user"}</h2>
-                <button className="text-blue-700" onClick={onClose}>✕</button>
+                <button className="text-blue-700" onClick={onClose} disabled={!!saving}>✕</button>
               </div>
+      
               <form onSubmit={handleSubmit} className="px-6 py-5 grid gap-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Name</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={name} onChange={e=>setName(e.target.value)} required />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Plan</span>
-                    <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={plan} onChange={e=>setPlan(e.target.value)}>
-                      <option value="2m">2 months</option>
-                      <option value="6m">6 months</option>
-                      <option value="1y">1 year</option>
-                    </select>
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Discord ID</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={discord_id} onChange={e=>setDiscord(e.target.value)} />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">User Key</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={user_key} onChange={e=>setUserKey(e.target.value)} />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Renewal date</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={renewalLocal} onChange={e=>setRenewalLocal(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Latest paid</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={latest_paid_iso_str} onChange={e=>setLatestPaid(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
-                    <input type="url" className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={stripe_customer_id} onChange={e=>setStripe(e.target.value)} />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">Country</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={country} onChange={e=>setCountry(e.target.value)} />
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm text-blue-900/90">VAT ID</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
-                  </label>
-
-                  <label className="grid gap-2">
-                    <span className="text-sm text-blue-900/90">Invoice status</span>
-                    <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
-                  </label>
-
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
-                    <span className="text-blue-900/90">Business</span>
-                  </label>
-
-                  <label className="grid gap-1 sm:col-span-2">
-                    <span className="text-sm text-blue-900/90">Note</span>
-                    <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 mt-2">
-                  <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
-                  <button type="submit" className="px-4 py-2 rounded-xl bg-blue-700 text-white">Save</button>
-                </div>
+                <fieldset disabled={!!saving} className={saving ? "opacity-60" : ""}>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Name</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={name} onChange={e=>setName(e.target.value)} required />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Plan</span>
+                      <select className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={plan} onChange={e=>setPlan(e.target.value)}>
+                        <option value="2m">2 months</option>
+                        <option value="6m">6 months</option>
+                        <option value="1y">1 year</option>
+                      </select>
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Discord ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={discord_id} onChange={e=>setDiscord(e.target.value)} />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">User Key</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={user_key} onChange={e=>setUserKey(e.target.value)} />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Renewal date</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={renewalLocal} onChange={e=>setRenewalLocal(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} required />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Latest paid</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={latest_paid_iso_str} onChange={e=>setLatestPaid(e.target.value)} placeholder="dd/mm/yyyy" pattern={datePattern} />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Stripe Customer ID</span>
+                      <input type="url" className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={stripe_customer_id} onChange={e=>setStripe(e.target.value)} />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">Country</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={country} onChange={e=>setCountry(e.target.value)} />
+                    </label>
+      
+                    <label className="grid gap-1">
+                      <span className="text-sm text-blue-900/90">VAT ID</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={vat_id} onChange={e=>setVat(e.target.value)} />
+                    </label>
+      
+                    <label className="grid gap-2">
+                      <span className="text-sm text-blue-900/90">Invoice status</span>
+                      <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
+                    </label>
+      
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
+                      <span className="text-blue-900/90">Business</span>
+                    </label>
+      
+                    <label className="grid gap-1 sm:col-span-2">
+                      <span className="text-sm text-blue-900/90">Note</span>
+                      <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
+                    </label>
+                  </div>
+      
+                  <div className="flex items-center justify-end gap-2 mt-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-blue-200 bg-white">Cancel</button>
+                    <button
+                      type="submit"
+                      disabled={!!saving}
+                      className={`px-4 py-2 rounded-xl text-white ${saving ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-700 hover:opacity-90'}`}
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </fieldset>
               </form>
             </div>
           </div>
