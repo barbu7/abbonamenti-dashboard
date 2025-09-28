@@ -293,11 +293,11 @@
             setRev(res);
           }catch(e){ console.error(e); alert("Revenue load error"); }
         }
-
+        
         const usersIndex = useMemo(()=>buildUsersIndex(state.companies), [state.companies]);
-
+        
         if(!ready) return <div className="min-h-screen flex items-center justify-center text-blue-900/70">Loading…</div>;
-
+        
         const isDeletedSub = state.company === '4';
         const isOther = state.company === '3';
         const columnsCount = isOther ? 3 : (isDeletedSub ? 4 : 7);
@@ -306,11 +306,19 @@
           <div className="min-h-screen">
             <header className="sticky top-0 z-10 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow">
               <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
-                <a href="./" className="flex items-center gap-3">
-                  <img src="Losco_Bot.png" alt="LOSCOBOT" className="h-9 w-9 rounded-md shadow-sm select-none" draggable="false" width="36" height="36" />
+                {/* Titolo NON cliccabile */}
+                <div className="flex items-center gap-3 cursor-default select-none">
+                  <img
+                    src="Losco_Bot.png"
+                    alt="LOSCOBOT"
+                    className="h-9 w-9 rounded-md shadow-sm"
+                    draggable="false"
+                    width="36"
+                    height="36"
+                  />
                   <span className="text-2xl font-bold drop-shadow">LOSCOBOT Subscriptions Dashboard</span>
-                </a>
-
+                </div>
+        
                 {/* Tabs + Refresh */}
                 <div className="flex items-center gap-2">
                   {[
@@ -332,9 +340,12 @@
                   >
                     Revenue
                   </button>
-                  <button id="btn-refresh" title="Refresh"
-                          className="px-3 py-1 rounded-full border border-white/50 bg-blue-500/30 hover:bg-blue-500/40"
-                          onClick={()=>manualRefresh(true)}>
+                  <button
+                    id="btn-refresh"
+                    title="Refresh"
+                    className="px-3 py-1 rounded-full border border-white/50 bg-blue-500/30 hover:bg-blue-500/40"
+                    onClick={()=>manualRefresh(true)}
+                  >
                     🔄
                   </button>
                 </div>
