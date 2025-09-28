@@ -551,7 +551,6 @@
         const [country,setCountry]=useState(defaultValues?.country||"");
         const [vat_id,setVat]=useState(defaultValues?.vat_id||"");
         const [note,setNote]=useState(defaultValues?.note||"");
-        const [status_invoice,setStatus]=useState(defaultValues?.status_invoice||"");
         const [business,setBusiness]=useState(!!defaultValues?.business);
       
         useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
@@ -572,7 +571,7 @@
             name:name.trim()||"Unnamed",
             plan, renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
-            country, vat_id, note, status_invoice, business
+            country, vat_id, note, business
           });
         }
       
@@ -643,11 +642,6 @@
                       <input className="px-3 py-2 border border-blue-200 rounded-xl bg-white" value={status_invoice} onChange={e=>setStatus(e.target.value)} />
                     </label>
       
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" className="w-5 h-5" checked={business} onChange={e=>setBusiness(e.target.checked)} />
-                      <span className="text-blue-900/90">Business</span>
-                    </label>
-      
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
                       <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
@@ -705,7 +699,6 @@
 
                   <ReadRow label="Country" value={user.country || ""} />
                   <ReadRow label="VAT ID" value={user.vat_id || ""} />
-                  <ReadRow label="Invoice status" value={user.status_invoice || ""} />
 
                   <div className="grid gap-1">
                     <span className="text-sm text-blue-900/90">Business</span>
@@ -824,16 +817,16 @@
         const [items, setItems] = useState([]);
         const [q, setQ] = useState("");
         const [revBusy, setRevBusy] = useState(null);
-
+      
         useEffect(()=>{
           const safeItems = Array.isArray(data.items) ? data.items.slice() : [];
           setItems(safeItems);
         }, [data.ok, JSON.stringify(data.items||[])]);
-
+      
         function companyLabel(cid){
           return cid==='1'?'Hidden':cid==='2'?'Sara':cid==='4'?'Deleted Sub':cid==='3'?'Other':'-';
         }
-
+      
         async function onResetTotals(){
           if (revBusy) return;
           if (!confirm("Reset: eliminare TUTTE le righe in Payments e azzerare i totali?")) return;
@@ -846,7 +839,7 @@
             setRevBusy(null);
           }
         }
-
+      
         async function onDeleteRow(row_index){
           if (revBusy) return;
           if (!row_index) return;
@@ -860,15 +853,15 @@
             setRevBusy(null);
           }
         }
-
+      
         const filtered = useMemo(()=>{
           const t = q.trim().toLowerCase();
           if (!t) return items;
           return items.filter(it => String(it.name||"").toLowerCase().includes(t));
         }, [items, q]);
-
+      
         const viewItems = filtered.slice().reverse();
-
+      
         return (
           <section className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -887,7 +880,7 @@
               >
                 {revBusy === 'reset' ? 'Resetting…' : 'Reset'}
               </button>
-
+      
               <div className="ml-auto flex items-center gap-2">
                 <div className="relative">
                   <input
@@ -912,7 +905,7 @@
                 </div>
               </div>
             </div>
-
+      
             <div className="grid md:grid-cols-3 gap-3">
               <div className="bg-white rounded-2xl border border-blue-200 p-4 shadow">
                 <div className="text-sm text-blue-900/70">Hidden €</div>
@@ -927,7 +920,7 @@
                 <div className="text-2xl font-bold text-blue-900 mt-1">{eur(data.total)}</div>
               </div>
             </div>
-
+      
             <div className="bg-blue-50 rounded-2xl border border-blue-200 shadow overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-blue-100">
@@ -939,12 +932,17 @@
                     <th className="text-left px-4 py-3">Country</th>
                     <th className="text-left px-4 py-3">Business</th>
                     <th className="text-left px-4 py-3">Renewal range</th>
+                    <th className="text-left px-4 py-3">Invoice</th>
                     <th className="text-left px-4 py-3">Delete</th>
                   </tr>
                 </thead>
                 <tbody>
                   {viewItems.length>0 ? viewItems.map((it,idx)=> {
                     const userInfo = usersIndex[it.user_id] || { vat_id:"", country:"", business:false };
+                    const inv = !!it.invoice_done;
+                    const key = `invoice:${it.row_index}`;
+                    const disabledToggle = String(revBusy)===key;
+      
                     return (
                       <tr key={`${it.row_index}-${idx}`} className="border-top border-blue-200 bg-white">
                         <td className="px-4 py-3 text-blue-900/80">{companyLabel(String(it.company_id||""))}</td>
@@ -956,6 +954,37 @@
                           <span className={`inline-block w-3 h-3 rounded-full ${userInfo.business?'bg-emerald-500':'bg-red-500'}`} title={userInfo.business ? 'Yes' : 'No'}></span>
                         </td>
                         <td className="px-4 py-3 text-blue-900/80">{it.renewal_range || localDateStrFromISO(it.renewal_iso)}</td>
+      
+                        {/* Invoice toggle */}
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={async ()=>{
+                              if (disabledToggle) return;
+                              try{
+                                setRevBusy(key);
+                                const res = await apiAction({
+                                  action: 'payments_toggle_invoice',
+                                  row_index: it.row_index,
+                                  value: !inv
+                                });
+                                if (res.error){ alert(res.error); return; }
+                                await onReload();
+                              } finally {
+                                setRevBusy(null);
+                              }
+                            }}
+                            disabled={disabledToggle}
+                            className={`px-3 py-1 rounded-full text-white text-sm ${
+                              inv ? (disabledToggle ? 'bg-emerald-400' : 'bg-emerald-600 hover:opacity-90')
+                                  : (disabledToggle ? 'bg-gray-400'   : 'bg-gray-600 hover:opacity-90')
+                            }`}
+                            title={inv ? 'Invoice sent (click to unset)' : 'Invoice not sent (click to set)'}
+                          >
+                            {inv ? 'Yes' : 'No'}
+                          </button>
+                        </td>
+      
+                        {/* Delete */}
                         <td className="px-4 py-2">
                           <button
                             title="Delete payment"
@@ -971,7 +1000,7 @@
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-blue-900/60">No payments</td></tr>
                   )}
                 </tbody>
               </table>
