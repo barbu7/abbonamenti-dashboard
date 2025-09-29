@@ -256,11 +256,6 @@
 
         async function removeUserLocal(id){
           if(!confirm("Delete this user permanently?")) return;
-        
-          let snapshot, removed = false;
-        
-        async function removeUserLocal(id){
-          if(!confirm("Delete this user permanently?")) return;
           try{
             setBusyBtn('remove:'+id);
             await apiAction({ action:'delete', id });
