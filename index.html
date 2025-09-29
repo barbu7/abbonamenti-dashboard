@@ -203,12 +203,14 @@
             setBusyBtn('add');
             const manualISO=isoFromLocalDateStr(user.renewalLocal||"");
             const renewalISO= manualISO || addPlan(startOfTodayISO(), user.plan);
-            const res=await apiAction({ action:'create', company_id: company,
+            const res=await apiAction({
+              action:'create', company_id: company,
               name:user.name, plan:user.plan, renewal_iso: renewalISO,
               discord_id:user.discord_id||'', user_key:user.user_key||'',
               latest_paid_iso:user.latest_paid_iso||'', stripe_customer_id:user.stripe_customer_id||'',
               country:user.country||'', vat_id:user.vat_id||'', note:user.note||'',
-              business:!!user.business
+              business:!!user.business,
+              ...(user.amount_eur ? { amount_eur: user.amount_eur } : {}) // ⬅️ solo se compilato
             });
             const u=res.user;
             updateCompanyUsers(arr=>{
@@ -520,12 +522,15 @@
 
               {showForm && (
                 <UserForm
+                  companyId={state.company}   // ⬅️ nuovo
                   defaultValues={editUser||undefined}
                   onClose={()=>{ setShowForm(false); setEditUser(null); }}
                   onSave={async (payload, cancelSub)=>{ 
                     if(editUser) await updateUserLocal({ ...editUser, ...payload }, { cancelSub }); 
                     else await addUserLocal(payload); 
                     setShowForm(false); setEditUser(null); 
+                    // se ho loggato un prezzo ricarico la revenue
+                    if (!editUser && payload.amount_eur) { await loadRevenue(); }
                   }}
                   saving={busyBtn==='add' || busyBtn==='edit'}
                 />
@@ -548,8 +553,9 @@
       }
 
       /* ====== FORM ====== */
-      function UserForm({ onClose, onSave, defaultValues, saving = false }){
+      function UserForm({ onClose, onSave, defaultValues, saving = false, companyId }){
         const isEdit = !!defaultValues;
+      
         const [name,setName]=useState(defaultValues?.name||"");
         const [plan,setPlan]=useState(defaultValues?.plan||"2m");
         const [renewalLocal,setRenewalLocal]=useState(
@@ -564,26 +570,36 @@
         const [note,setNote]=useState(defaultValues?.note||"");
         const [business,setBusiness]=useState(!!defaultValues?.business);
       
+        // NUOVO: prezzo (solo in Add user; opzionale)
+        const [price, setPrice] = useState("");
+      
         useEffect(()=>{ if(!isEdit) setRenewalLocal(formatLocalDate(new Date(addPlan(startOfTodayISO(), plan)))); }, [plan, isEdit]);
       
         function handleSubmit(e){
           e.preventDefault();
-          if (saving) return;
+          if (saving) return; // evita doppio submit
       
           const dt=parseLocalDateStr(renewalLocal);
           if(!dt) return alert("Renewal date must be dd/mm/yyyy");
+      
           let latestISO='';
           if(latest_paid_iso_str){
             const d2=parseLocalDateStr(latest_paid_iso_str);
             if(!d2) return alert("Latest paid must be dd/mm/yyyy");
             latestISO=d2.toISOString();
           }
+      
           onSave({
             name:name.trim()||"Unnamed",
             plan, renewalLocal,
             discord_id, user_key, latest_paid_iso: latestISO, stripe_customer_id,
             country, vat_id, note,
-            business: !!business
+            business: !!business,
+            // Invia amount_eur SOLO in Add user, SOLO per Hidden(1)/Sara(2) e SOLO se compilato
+            ...( !isEdit && (companyId==='1' || companyId==='2') && price.trim()
+                ? { amount_eur: price.trim() }
+                : {}
+            )
           });
         }
       
@@ -671,7 +687,21 @@
                         </button>
                       </div>
                     </div>
-
+      
+                    {/* ===== Price (€) — SOLO Add + (Hidden|Sara) ===== */}
+                    {(!isEdit && (companyId==='1' || companyId==='2')) && (
+                      <label className="grid gap-1">
+                        <span className="text-sm text-blue-900/90">Price (€) — optional</span>
+                        <input
+                          className="px-3 py-2 border border-blue-200 rounded-xl bg-white"
+                          value={price}
+                          onChange={e=>setPrice(e.target.value)}
+                          placeholder="0.00"
+                          inputMode="decimal"
+                        />
+                      </label>
+                    )}
+      
                     <label className="grid gap-1 sm:col-span-2">
                       <span className="text-sm text-blue-900/90">Note</span>
                       <textarea className="px-3 py-2 border border-blue-200 rounded-xl bg-white" rows="3" value={note} onChange={e=>setNote(e.target.value)} />
